@@ -1,0 +1,434 @@
+# Heart rate estimation from PCG: paths, signal parameters, evaluation, budgets, variants.
+# Paths are relative to the project root. Variants (bottom) are deep-merged over the base.
+
+paths:
+  manifest: data/sq5_sweep_core500_20261008/manifest.csv
+  wav_dir: data/sq5_sweep_core500_20261008/wavs
+  ecg_dir: data/sq5_sweep_core500_20261008/ecg
+  split_manifest: output/splits/split_v1.csv
+  reference_labels: output/labels/reference_v2.csv   # corrected labels (hr_cli.py relabel)
+  runs_dir: output/runs
+  models_dir: output/models
+  cache_dir: output/cache
+
+data:
+  reference_column: efast_ecg_heart_rate   # ECG HR, independent of the PCG under test
+  group_column: user_id                    # split groups (clinician account)
+  stratify_bin_bpm: 5
+  n_folds: 10
+  folds: {train: [0, 1, 2, 3, 4], val: [5, 6], test: [7, 8, 9]}
+  fold_subsets: {val_a: [5], val_b: [6]}   # val halves: gate training / release tuning
+  seed: 20261031
+  max_duration_s: 17.0                     # longer recordings truncated
+
+reference:                                 # ECG answer key (offline; never an estimator input)
+  ecg_suffix: _ECG_1                       # lead 2
+  band_hz: [5, 25]                         # QRS band
+  refractory_s: 0.25                       # minimum R-R interval (240 BPM)
+  peak_height_rel: 0.3                     # x median of the stronger candidate peaks
+  refine_s: 0.05                           # R-peak refinement half-window
+  rr_frac: 0.6                             # second-pass spacing, x median R-R of the first pass
+  max_spacing_s: 0.8
+  agree_bpm: 5.0                           # trusted: R-peak HR within this of the EFAST ECG HR
+  consensus_leads: [_ECG, _ECG_1, _ECG_2]  # relabel: all leads reliable and in agreement
+  consensus_rel: 0.03                      # lead HRs within 3 % of their median
+  relabel_min_ratio: 1.5                   # relabel only where ECG count >= 1.5x EFAST
+  window_s: 4.0                            # HR reference window ending at each reading
+  min_beats: 4
+  rr_range_s: [0.25, 2.2]                  # plausible R-R intervals (27-240 BPM)
+
+stream:
+  fs_hz: 4000
+  block_samples: 200                       # 50 ms input block
+  frame_blocks: 5                          # tracker frame = 5 blocks = 0.25 s
+  output_period_s: 1.0                     # reading interval after the first reading
+
+frontend:
+  bands_hz: [[25, 400]]                    # one envelope channel per band
+  filter_order: 2                          # Butterworth order per band edge
+  notch_hz: null                           # mains notch; null = off
+  env_rate_hz: 100                         # envelope rate; decimation = fs_hz / env_rate_hz
+  compress: log                            # log | power
+  compress_power: 0.5                      # used when compress = power (0.5 = RMS)
+  onset: false                             # half-wave rectified first difference
+  wave_rate_hz: 1000                       # band-limited waveform rate for waveform GCC
+
+net:
+  enabled: false
+  arch: tcn                                # tcn | gru
+  weights: null                            # .npz under models_dir
+  bands_hz: [[25, 50], [50, 100], [100, 200], [200, 400]]
+  norm_tau_s: 1.0                          # running-mean time constant of the input
+  tcn_channels: 8
+  tcn_kernel: 3
+  tcn_dilations: [1, 2, 4, 8, 16]          # receptive field 1 + 2 * 31 = 63 frames = 0.63 s
+  gru_hidden: 12
+  head: activation                         # activation (hybrid) | hr (end-to-end HR classes)
+  hr_basis: 24                             # Gaussian basis functions over log-HR (head = hr)
+  label_delay_s: 0.05                      # target placed 50 ms after S1: causal look-ahead
+  label_sigma_s: 0.03
+  label_tightness: 100.0                   # beat-tracking penalty on period deviation
+  label_systole_s: [0.50, -0.0021]         # expected S1-S2 interval: a + b * HR (s), clipped
+  loss: periodicity                        # bce (pseudo S1 labels) | periodicity | both
+  periodicity_window_s: [3.0, 3.0]         # ACF-loss window drawn per batch from [min, max] s
+  pos_weight: 4.0
+  crop_s: 4.0                              # crop = 1 s context + periodicity window
+  batch: 32
+  epochs: 30
+  lr: 0.003
+
+periodicity:
+  method: nccf                             # acf | nccf | yin | gacf | gcc_segment
+  input: envelope                          # envelope | activation | waveform (gcc_segment)
+  window_s: 4.0                            # longest analysis window
+  min_overlap_s: 0.8                       # lags valid only with this much overlap
+  min_window_s: 1.0                        # no evidence before this much signal
+  gacf_k: 0.67                             # spectral exponent: 2 = ACF, 0 = full PHAT
+  gcc_gamma: 1.0                           # cross-spectrum weighting: 1 = PHAT, 0 = plain
+  gcc_template_s: 1.0
+  phat_band_hz: null                       # whitening band for gacf / gcc_segment; null = all
+  comb_harmonics: 2                        # multiples of the period averaged (comb)
+  min_harmonics: 2                         # multiples that must fit before a state is scored
+  subharmonic_penalty: 0.5                 # weight of score at lag T/2 subtracted
+  pooling: interp                          # interp | max (score per HR state from lags)
+  product_temporal: nccf                   # temporal method used by method = product
+  product_dft_power: 1.0                   # exponent on the spectral factor
+
+tracker:
+  enabled: true
+  hr_min_bpm: 30
+  hr_max_bpm: 230
+  grid_step_rel: 0.01                      # log-spaced HR states, 1 % apart
+  obs_beta: 8.0                            # emission sharpness
+  sigma_rel_per_sqrt_s: 0.04               # HR random walk, relative, per sqrt(second)
+  octave_prob: 0.002                       # per-frame probability of a x2 / x0.5 jump
+  floor_prob: 0.0005                       # per-frame uniform re-initialisation mass
+  release_mode: posterior                  # posterior | frame | both | deadline
+  release_conf: 0.7                        # posterior mass needed for the first reading
+  release_frame_conf: [[0, 0.9], [3, 0.9], [6, 0.6]]   # frame salience mass needed vs time
+  release_tol_rel: 0.05                    # half-width of the confidence window, relative
+  hold_conf: 0.3                           # below this, readings after release are withheld
+  min_time_s: 1.0
+  fixed_window_s: 3.0                      # tracker disabled: first reading at this time
+
+salience:
+  enabled: false
+  weights: null                            # .npz under models_dir
+  emission_beta: 1.0                       # scale on the log-softmax emission
+  dual_input: false                        # add features of the band-mean envelope (net only)
+  hidden: 8
+  positive_tol_rel: 0.03                   # training: states within 3 % of the reference
+  dense_until_s: 5.0                       # training frames: every frame up to here
+  sparse_step_s: 1.0                       # then one frame per this step
+  epochs: 8
+  batch_frames: 256
+  lr: 0.003
+  weight_decay: 0.0001
+
+gate:
+  weights: null                            # .npz under models_dir (release.confidence = gate)
+  hidden: 8
+  l2: 0.001
+  max_iter: 400
+  collect_max_s: 10.0                      # training frames up to this time
+
+release:                                   # used when tracker.release_mode = deadline
+  confidence: frame                        # frame (salience confidence + tracker agreement) | gate
+  min_s: 1.5                               # earliest answer
+  default_s: 3.0                           # answer cutoff, HR >= low_hr_bpm
+  low_hr_s: 6.0                            # answer cutoff when the heart may be slower
+  max_s: 8.0                               # always answer by this time
+  low_hr_bpm: 50
+  low_mass_min: 0.2                        # posterior mass below low_hr_bpm: "may be slow"
+  min_periods: 0.0                         # periods of the estimate the window must hold
+  c_early: 0.95                            # confidence needed before the cutoff
+  c_cutoff: 0.8                            # needed at the cutoff, falling linearly to 0 at max_s
+
+beats:                                     # beat picking on the activation (net head = activation)
+  enabled: false                           # adds beat-interval features to the scorer input
+  threshold_rel: 0.7                       # x decaying peak level
+  smooth_s: 0.15                           # causal moving average of the activation
+  warmup_s: 0.5                            # no beats before this time
+  half_life_s: 2.0                         # peak-level decay
+  refractory_s: 0.25                       # minimum spacing (240 BPM)
+  rr_frac: 0.6                             # spacing x median interval once known
+  max_intervals: 4                         # intervals kept
+  match_width_rel: 0.03                    # minimum width of the interval match (log-HR)
+
+eval:
+  tolerance_bpm: 5.0                       # EC13: max(5 BPM, 10 %)
+  tolerance_rel: 0.10
+  half_double_rel: 0.15                    # error within 15 % of 0.5x or 2x reference
+  workers: 16
+  curve_times_s: [1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 8, 10, 17]
+
+targets:
+  steady_within: 0.97
+  first_within: 0.95
+  half_double_max: 0.01
+  coverage_min: 0.99
+  ttfr_median_s: 3.0                      # HR >= low_hr_bpm
+  ttfr_p95_s: 6.0                          # HR >= low_hr_bpm
+  ttfr_low_hr_median_s: 6.0                # HR < low_hr_bpm
+  ttfr_max_s: 8.0                          # every recording
+  low_hr_bpm: 50
+
+budget:
+  mips: 30
+  ram_bytes: 15360
+  flash_bytes: 5120
+
+augment:                                   # training splits only
+  copies: 4                                # augmented copies per training recording
+  seed: 11
+  warp_rr_cv_max: 0.10                     # warp only regular, trusted ECG beats
+  warp_rr_dev_max: 0.25
+  p_warp: 0.7
+  p_slow: 0.35                             # share of warps aimed at slow hearts
+  target_bpm: [30, 220]                    # log-uniform target HR
+  slow_target_bpm: [30, 50]
+  hr_factor_range: [0.45, 1.8]             # target / original HR
+  keep_s: 0.5                              # unwarped part after each R-peak (S1, systole, S2)
+  keep_frac: 0.65                          # ... at most this share of the cycle
+  min_diastole_s: 0.08
+  p_jitter: 0.25
+  jitter_cv: [0.03, 0.15]                  # per-cycle R-R variation (irregular rhythm)
+  p_noise: 0.8
+  noise_types: [white, hum, breath]        # friction held out for the stress test
+  snr_db: [0, 25]
+  gain_db: [-12, 12]
+  p_tilt: 0.5
+  tilt_alpha: [0.3, 1.0]
+  tilt_cutoff_hz: 150
+
+stress:
+  n_records: 200                            # held-out recordings per condition
+  snr_db: [20, 10, 5, 0]
+  noise_types: [white, friction, hum, breath]
+  seed: 7
+
+
+
+variants:
+  # Fixed-window baselines (no tracker): first reading at window_s
+  acf_w2:
+    tracker: {enabled: false, fixed_window_s: 2.0}
+    periodicity: {method: acf, window_s: 2.0, min_overlap_s: 0.0, comb_harmonics: 1,
+      min_harmonics: 1, subharmonic_penalty: 0.0}
+  acf_w3:
+    tracker: {enabled: false, fixed_window_s: 3.0}
+    periodicity: {method: acf, window_s: 3.0, min_overlap_s: 0.0, comb_harmonics: 1,
+      min_harmonics: 1, subharmonic_penalty: 0.0}
+  acf_w4:
+    tracker: {enabled: false, fixed_window_s: 4.0}
+    periodicity: {method: acf, window_s: 4.0, min_overlap_s: 0.0, comb_harmonics: 1,
+      min_harmonics: 1, subharmonic_penalty: 0.0}
+  acf_w6:
+    tracker: {enabled: false, fixed_window_s: 6.0}
+    periodicity: {method: acf, window_s: 6.0, min_overlap_s: 0.0, comb_harmonics: 1,
+      min_harmonics: 1, subharmonic_penalty: 0.0}
+  nccf_w3:
+    tracker: {enabled: false, fixed_window_s: 3.0}
+    periodicity: {method: nccf, window_s: 3.0}
+  nccf_plain_w3:
+    tracker: {enabled: false, fixed_window_s: 3.0}
+    periodicity: {method: nccf, window_s: 3.0, comb_harmonics: 1, min_harmonics: 1,
+      subharmonic_penalty: 0.0}
+  dft_w3:
+    tracker: {enabled: false, fixed_window_s: 3.0}
+    periodicity: {method: dft, window_s: 3.0, min_harmonics: 1}
+  prod_w3:
+    tracker: {enabled: false, fixed_window_s: 3.0}
+    periodicity: {method: product, window_s: 3.0, comb_harmonics: 1, min_harmonics: 1,
+      subharmonic_penalty: 0.0}
+  # DSP periodicity methods with the HMM tracker (posterior release)
+  trk_acf:
+    periodicity: {method: acf}
+  trk_nccf:
+    periodicity: {method: nccf}
+  trk_nccf_plain:
+    periodicity: {method: nccf, comb_harmonics: 1, min_harmonics: 1, subharmonic_penalty: 0.0}
+  trk_nccf_comb3:
+    periodicity: {method: nccf, comb_harmonics: 3}
+  trk_yin:
+    periodicity: {method: yin}
+  trk_gacf_067:
+    periodicity: {method: gacf, gacf_k: 0.67}
+  trk_gacf_100:
+    periodicity: {method: gacf, gacf_k: 1.0}
+  trk_gacf_050:
+    periodicity: {method: gacf, gacf_k: 0.5}
+  trk_phat_full:
+    periodicity: {method: gacf, gacf_k: 0.0}
+  trk_gcc_env:
+    periodicity: {method: gcc_segment, input: envelope, pooling: max}
+  trk_gcc_wave:
+    periodicity: {method: gcc_segment, input: waveform, pooling: max}
+  trk_prod:
+    periodicity: {method: product, comb_harmonics: 1, min_harmonics: 1, subharmonic_penalty: 0.0}
+  # Hybrid development variants
+  sal_v1:
+    salience: {enabled: true, weights: sal_v1.npz}
+  net_tcn_w3:
+    net: {enabled: true, arch: tcn, weights: net_tcn_per.npz}
+    tracker: {enabled: false, fixed_window_s: 3.0}
+    periodicity: {method: acf, input: activation, window_s: 3.0, min_overlap_s: 0.0,
+      comb_harmonics: 1, min_harmonics: 1, subharmonic_penalty: 0.0}
+  net_gru_w3:
+    net: {enabled: true, arch: gru, weights: net_gru_per.npz}
+    tracker: {enabled: false, fixed_window_s: 3.0}
+    periodicity: {method: acf, input: activation, window_s: 3.0, min_overlap_s: 0.0,
+      comb_harmonics: 1, min_harmonics: 1, subharmonic_penalty: 0.0}
+  tcn_sal:
+    net: {enabled: true, arch: tcn, weights: net_tcn_per.npz}
+    periodicity: {input: activation}
+    salience: {enabled: true, weights: sal_tcn.npz, emission_beta: 0.35}
+    tracker: {release_mode: frame}
+  # End-to-end ML (HR-class head)
+  ml_tcn:
+    net:
+      enabled: true
+      arch: tcn
+      head: hr
+      weights: ml_tcn.npz
+      tcn_channels: 16
+      tcn_dilations: [1, 2, 4, 8, 16, 32, 64]
+      periodicity_window_s: [2.0, 4.0]
+      crop_s: 5.0
+      epochs: 60
+    periodicity: {input: activation}
+    salience: {emission_beta: 0.35}
+    tracker: {release_mode: frame}
+  ml_gru:
+    net:
+      enabled: true
+      arch: gru
+      head: hr
+      weights: ml_gru.npz
+      gru_hidden: 32
+      periodicity_window_s: [2.0, 4.0]
+      crop_s: 5.0
+      epochs: 60
+    periodicity: {input: activation}
+    salience: {emission_beta: 0.35}
+    tracker: {release_mode: frame}
+  # Finalists: selected on the val split, evaluated once on test
+  hybrid_final:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_w24_e60.npz}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16.npz,
+      emission_beta: 0.35}
+    tracker:
+      release_mode: frame
+      release_frame_conf:
+      - [0, 0.95]
+      - [2.5, 0.95]
+      - [4.0, 0.4]
+  ml_final:
+    net:
+      enabled: true
+      arch: tcn
+      head: hr
+      weights: ml_tcn.npz
+      tcn_channels: 16
+      tcn_dilations: [1, 2, 4, 8, 16, 32, 64]
+    periodicity: {input: activation}
+    salience: {emission_beta: 0.35}
+    tracker:
+      release_mode: frame
+      release_frame_conf:
+      - [0, 0.95]
+      - [2.0, 0.95]
+      - [3.5, 0.4]
+  dsp_final:
+    periodicity: {method: nccf, comb_harmonics: 1, min_harmonics: 1, subharmonic_penalty: 0.0}
+    tracker: {obs_beta: 8, release_conf: 0.8}
+  # Deadline release with learned confidence (gate)
+  hybrid_v2:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_w24_e60.npz}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16.npz,
+      emission_beta: 0.35}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    gate: {weights: gate_v2.npz}
+  hybrid_v2_w6:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_w24_e60.npz}
+    periodicity: {input: activation, window_s: 6.0}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_w6.npz,
+      emission_beta: 0.35}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    gate: {weights: gate_v2_w6.npz}
+  hybrid_deadline:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_w24_e60.npz}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16.npz,
+      emission_beta: 0.35}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+  # Finalist since 2026-11-05: hybrid_deadline models retrained on augmented data
+  hybrid_aug:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_aug.npz, periodicity_window_s: [2.0, 4.0],
+      epochs: 40}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug.npz,
+      emission_beta: 0.35, epochs: 12}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+  hybrid_aug12:
+    net: {enabled: true, arch: tcn, weights: net_tcn12_aug.npz, tcn_channels: 12,
+      periodicity_window_s: [2.0, 4.0], epochs: 60}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug12.npz,
+      emission_beta: 0.35, epochs: 12}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+  hybrid_aug_mild:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_aug_mild.npz,
+      periodicity_window_s: [2.0, 4.0], epochs: 60}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug_mild.npz,
+      emission_beta: 0.35, epochs: 12}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+    augment: {snr_db: [5, 30], seed: 12}
+  hybrid_aug60:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_aug60.npz,
+      periodicity_window_s: [2.0, 4.0], epochs: 60}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug60.npz,
+      emission_beta: 0.35, epochs: 12}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+  hybrid_aug_beats:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_aug.npz}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug_beats.npz,
+      emission_beta: 0.35, epochs: 12}
+    beats: {enabled: true}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+  hybrid_aug_gate:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_aug.npz}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug.npz,
+      emission_beta: 0.35}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: gate, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+    gate: {weights: gate_cf.npz}
+  # Trained on corrected labels (output/labels/reference_v2.csv)
+  hybrid_aug_v2:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_aug_v2.npz,
+      periodicity_window_s: [2.0, 4.0], epochs: 40}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug_v2.npz,
+      emission_beta: 0.35, epochs: 12}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.97, c_cutoff: 0.9, low_mass_min: 0.3}
+  # Fast setting of the finalist: answer cutoff 2.5 s, early confidence 0.95
+  hybrid_aug_fast:
+    net: {enabled: true, arch: tcn, weights: net_tcn8_aug.npz}
+    periodicity: {input: activation}
+    salience: {enabled: true, dual_input: true, hidden: 16, weights: sal_dual16_aug.npz,
+      emission_beta: 0.35}
+    tracker: {release_mode: deadline, hold_conf: 0.0}
+    release: {confidence: frame, c_early: 0.95, c_cutoff: 0.9, low_mass_min: 0.3, default_s: 2.5}
