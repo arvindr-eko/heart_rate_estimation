@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from scipy import signal
 
-from hr import reference, synth
+from pcg_hr import reference, synth
 
 
 def warp_eligible(beats_s: np.ndarray, efast_ecg_bpm: float, cfg: dict) -> bool:

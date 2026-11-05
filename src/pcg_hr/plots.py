@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from hr import evaluate  # noqa: E402
+from pcg_hr import evaluate  # noqa: E402
 
 SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
 INK, MUTED, GRID = "#1f1f1e", "#6b6a64", "#e4e3de"

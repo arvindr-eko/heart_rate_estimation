@@ -8,7 +8,8 @@ import yaml
 
 log = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG = PROJECT_ROOT / "config.yml"
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -22,7 +23,7 @@ def deep_merge(base: dict, override: dict) -> dict:
     return merged
 
 
-def load(path: str | Path = PROJECT_ROOT / "config.yml", variant: str | None = None,
+def load(path: str | Path = DEFAULT_CONFIG, variant: str | None = None,
          overrides: dict | None = None) -> dict:
     """Load the YAML config, apply a named variant and explicit overrides, resolve paths."""
     with open(path) as f:
@@ -32,31 +33,22 @@ def load(path: str | Path = PROJECT_ROOT / "config.yml", variant: str | None = N
         cfg = deep_merge(cfg, variants[variant])
     if overrides:
         cfg = deep_merge(cfg, overrides)
-    cfg["name"] = variant or "base"
+    cfg["name"] = variant or "final"
     cfg["paths"] = {k: PROJECT_ROOT / v for k, v in cfg["paths"].items()}
     validate(cfg)
     return cfg
 
 
-def variant_names(path: str | Path = PROJECT_ROOT / "config.yml") -> list[str]:
-    """Names of the variants defined in the config."""
-    with open(path) as f:
-        return list(yaml.safe_load(f).get("variants", {}))
-
-
 def validate(cfg: dict) -> None:
     """Raise on inconsistent stream and front-end sizes."""
-    fs = cfg["stream"]["fs_hz"]
-    block = cfg["stream"]["block_samples"]
-    for rate_key in ("env_rate_hz", "wave_rate_hz"):
-        rate = cfg["frontend"][rate_key]
-        if fs % rate or block % (fs // rate):
-            raise ValueError(f"{rate_key}={rate} must divide fs and the block size")
+    fs, block = cfg["stream"]["fs_hz"], cfg["stream"]["block_samples"]
+    rate = cfg["frontend"]["env_rate_hz"]
+    if fs % rate or block % (fs // rate):
+        raise ValueError(f"env_rate_hz={rate} must divide fs_hz and the block size")
 
 
 def preflight(cfg: dict, need_splits: bool = True) -> None:
     """Check inputs exist and outputs are writable; log one line per check, raise once."""
-    failures = []
     checks = [("manifest", cfg["paths"]["manifest"].is_file()),
               ("wav_dir", cfg["paths"]["wav_dir"].is_dir())]
     if need_splits:
@@ -73,7 +65,6 @@ def preflight(cfg: dict, need_splits: bool = True) -> None:
             checks.append((key, False))
     for name, ok in checks:
         log.info("preflight %-15s %s", name, "ok" if ok else "FAIL")
-        if not ok:
-            failures.append(name)
+    failures = [name for name, ok in checks if not ok]
     if failures:
         raise RuntimeError(f"preflight failed: {', '.join(failures)}")

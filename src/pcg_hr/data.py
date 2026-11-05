@@ -1,4 +1,4 @@
-"""Manifest and WAV loading, grouped stratified splits."""
+"""Manifest, answer key, grouped stratified splits and WAV loading."""
 
 import logging
 
@@ -13,11 +13,12 @@ SPLIT_COLUMNS = ["output_filename", "user_id", "reference_bpm", "hr_bin", "fold"
 
 
 def load_manifest(cfg: dict) -> pd.DataFrame:
-    """Recordings with status ok and a reference HR; adds reference_bpm (corrected labels from
-    paths.reference_labels when that file exists) and hr_bin."""
+    """Recordings with status ok and a reference HR. reference_bpm is the EFAST ECG HR, replaced
+    by the answer-key file (paths.reference_labels) when it exists; adds label_source, hr_bin."""
     df = pd.read_csv(cfg["paths"]["manifest"])
     df = df[df["status"] == "ok"].copy()
     df["reference_bpm"] = pd.to_numeric(df[cfg["data"]["reference_column"]], errors="coerce")
+    df["label_source"] = "efast"
     labels = cfg["paths"].get("reference_labels")
     if labels is not None and labels.is_file():
         corrected = pd.read_csv(labels).set_index("output_filename")
@@ -52,13 +53,11 @@ def make_splits(cfg: dict) -> pd.DataFrame:
 
 
 def load_split(cfg: dict, split: str | None = None) -> pd.DataFrame:
-    """Manifest rows of a split or a named fold subset (data.fold_subsets); all rows when None."""
+    """Manifest rows of one split (train, val, test); all rows when split is None."""
     splits = pd.read_csv(cfg["paths"]["split_manifest"])
     df = load_manifest(cfg).merge(splits[["output_filename", "fold", "split"]],
                                   on="output_filename")
-    if split in cfg["data"]["fold_subsets"]:
-        df = df[df["fold"].isin(cfg["data"]["fold_subsets"][split])]
-    elif split is not None:
+    if split is not None:
         df = df[df["split"] == split]
     return df.reset_index(drop=True)
 
