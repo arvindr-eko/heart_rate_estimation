@@ -1,0 +1,171 @@
+# pcg_hr: heart rate from PCG on the stethoscope MCU. Paths are relative to the project root.
+# Final candidate settings; variants (bottom) are deep-merged over these.
+
+paths:
+  manifest: data/sq5_sweep_core500_20261008/manifest.csv
+  wav_dir: data/sq5_sweep_core500_20261008/wavs
+  ecg_dir: data/sq5_sweep_core500_20261008/ecg
+  split_manifest: output/splits/split_v1.csv
+  reference_labels: output/labels/reference_v2.csv   # answer key written by `pcg-hr relabel`
+  runs_dir: output/runs
+  models_dir: output/models
+  cache_dir: output/cache
+  golden_dir: output/golden                          # frozen readings for regression tests
+
+data:
+  reference_column: efast_ecg_heart_rate   # EFAST ECG HR; replaced by the ECG count per labels
+  group_column: user_id                    # split groups (clinician account)
+  stratify_bin_bpm: 5
+  n_folds: 10
+  folds: {train: [0, 1, 2, 3, 4], val: [5, 6], test: [7, 8, 9]}
+  seed: 20261031
+  max_duration_s: 17.0                     # longer recordings truncated
+
+reference:                                 # ECG answer key (offline; never an estimator input)
+  ecg_suffix: _ECG_1                       # lead 2
+  band_hz: [5, 25]                         # QRS band
+  refractory_s: 0.25                       # minimum R-R interval (240 BPM)
+  peak_height_rel: 0.3                     # x median of the stronger candidate peaks
+  refine_s: 0.05                           # R-peak refinement half-window
+  rr_frac: 0.6                             # second-pass spacing, x median R-R of the first pass
+  max_spacing_s: 0.8
+  agree_bpm: 5.0                           # trusted: R-peak HR within this of the EFAST ECG HR
+  consensus_leads: [_ECG, _ECG_1, _ECG_2]  # relabel: all leads reliable and in agreement
+  consensus_rel: 0.03                      # lead HRs within 3 % of their median
+  relabel_min_ratio: 1.5                   # relabel only where the ECG count >= 1.5x EFAST
+  window_s: 4.0                            # windowed reference: beats in the 4 s before a reading
+  min_beats: 4
+  rr_range_s: [0.25, 2.2]                  # plausible R-R intervals (27-240 BPM)
+
+augment:                                   # training split only
+  copies: 4                                # augmented copies per training recording
+  seed: 11
+  warp_rr_cv_max: 0.10                     # warp only regular, trusted ECG beats
+  warp_rr_dev_max: 0.25
+  p_warp: 0.7
+  p_slow: 0.35                             # share of warps aimed at slow hearts
+  target_bpm: [30, 220]                    # log-uniform target HR
+  slow_target_bpm: [30, 50]
+  hr_factor_range: [0.45, 1.8]             # target / original HR
+  keep_s: 0.5                              # unwarped part after each R-peak (S1, systole, S2)
+  keep_frac: 0.65                          # ... at most this share of the cycle
+  min_diastole_s: 0.08
+  p_jitter: 0.25
+  jitter_cv: [0.03, 0.15]                  # per-cycle R-R variation (irregular rhythm)
+  p_noise: 0.8
+  noise_types: [white, hum, breath]        # friction held out for the stress test
+  snr_db: [0, 25]
+  gain_db: [-12, 12]
+  p_tilt: 0.5
+  tilt_alpha: [0.3, 1.0]
+  tilt_cutoff_hz: 150
+
+stream:
+  fs_hz: 4000
+  block_samples: 200                       # 50 ms input block
+  frame_blocks: 5                          # one tracker frame per 5 blocks = 0.25 s
+
+frontend:                                  # block A
+  bands_hz: [[25, 50], [50, 100], [100, 200], [200, 400]]
+  filter_order: 2                          # Butterworth order per band edge
+  env_rate_hz: 100                         # log energy every 10 ms (decimation 40)
+
+net:                                       # block B: causal TCN
+  weights: hr_tcn.npz                      # under models_dir
+  norm_tau_s: 1.0                          # running-mean time constant of the input
+  channels: 8
+  kernel: 3
+  dilations: [1, 2, 4, 8, 16]              # receptive field 1 + 2 x 31 = 63 frames = 0.63 s
+  periodicity_window_s: [2.0, 4.0]         # training: ACF-loss window drawn per batch
+  crop_s: 4.0
+  batch: 32
+  epochs: 40
+  lr: 0.003
+
+features:                                  # block C
+  window_s: 4.0                            # longest analysis window
+  min_window_s: 1.0                        # no features before this much signal
+  min_overlap_s: 0.8                       # NCCF valid only with this much overlap
+
+grid:                                      # HR states
+  hr_min_bpm: 30
+  hr_max_bpm: 230
+  step_rel: 0.01                           # log-spaced, 1 % apart: 205 states
+
+scorer:                                    # block D
+  weights: hr_scorer.npz                   # under models_dir
+  emission_beta: 0.35                      # weight of the log-softmax in the tracker
+  hidden: 16
+  positive_tol_rel: 0.03                   # training: states within 3 % of the reference
+  dense_until_s: 5.0                       # training frames: every frame up to here
+  sparse_step_s: 1.0                       # then one frame per this step
+  epochs: 12
+  batch_frames: 256
+  lr: 0.003
+  weight_decay: 0.0001
+
+tracker:                                   # block E
+  sigma_rel_per_sqrt_s: 0.04               # HR random walk, relative, per sqrt(second)
+  octave_prob: 0.002                       # per-frame probability of a x2 / x0.5 jump
+  floor_prob: 0.0005                       # per-frame uniform re-initialisation mass
+  conf_tol_rel: 0.05                       # confidence window and agreement tolerance, ±5 %
+
+release:                                   # block F: deadline release
+  min_s: 1.5                               # earliest answer
+  default_s: 3.0                           # answer cutoff, HR >= low_hr_bpm
+  low_hr_s: 6.0                            # answer cutoff when the heart may be slower
+  max_s: 8.0                               # always answer by this time
+  low_hr_bpm: 50
+  low_mass_min: 0.3                        # posterior mass below low_hr_bpm: "may be slow"
+  c_early: 0.97                            # confidence needed before the cutoff
+  c_cutoff: 0.9                            # needed at the cutoff, falling linearly to 0 at max_s
+  output_period_s: 1.0                     # reading interval after the first reading
+
+eval:
+  tolerance_bpm: 5.0                       # EC13: max(5 BPM, 10 %)
+  tolerance_rel: 0.10
+  half_double_rel: 0.15                    # error within 15 % of 0.5x or 2x reference
+  workers: 16
+  curve_times_s: [1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 8, 10, 17]
+
+targets:
+  steady_within: 0.97
+  first_within: 0.95
+  half_double_max: 0.01
+  coverage_min: 0.99
+  ttfr_median_s: 3.0                       # HR >= low_hr_bpm
+  ttfr_p95_s: 6.0                          # HR >= low_hr_bpm
+  ttfr_low_hr_median_s: 6.0                # HR < low_hr_bpm
+  ttfr_max_s: 8.0                          # every recording
+  low_hr_bpm: 50
+
+stress:
+  n_records: 200                           # held-out recordings per condition
+  snr_db: [20, 10, 5, 0]
+  noise_types: [white, friction, hum, breath]
+  seed: 7
+
+budget:                                    # PSoC 6 CM4 share for the algorithm
+  mips: 30
+  ram_bytes: 15360
+  flash_bytes: 5120
+
+profile:                                   # cost model (pcg_hr.cost_model)
+  clock_hz: 150000000                      # PSoC 6 CM4 maximum clock
+  number_format: float32                   # float32 | fixed (16-bit data, 8-bit weights)
+  cycles:                                  # Cortex-M4F cycles per operation
+    mac_float: 3                           # VFMA.F32
+    mac_fixed: 0.5                         # SMLAD: two 16-bit MACs per cycle
+    add: 1
+    div: 14                                # VDIV.F32
+    sqrt: 14                               # VSQRT.F32
+    exp: 40                                # polynomial approximation (assumption)
+    log: 40                                # polynomial approximation (assumption)
+    load_store: 1                          # pipelined LDR/STR
+  overhead: 1.3                            # loop control, addressing, flash wait states
+  code_bytes_estimate: 3000                # until the C build exists
+  weight_bytes: 1                          # 8-bit weights in flash
+
+variants:
+  fast:                                    # answer cutoff 2.5 s, early confidence 0.95
+    release: {c_early: 0.95, default_s: 2.5}
