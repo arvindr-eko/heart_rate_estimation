@@ -1,0 +1,74 @@
+# Device settings: everything the stethoscope runs (package `device`, ported 1:1 to C).
+#   1. USER SETTINGS   safe to change at any time; no retraining
+#   2. ALGORITHM       fixed by the trained model; change only with retraining or re-validation
+# Training, data and evaluation settings: configs/training.yml.
+
+
+# ── 1. USER SETTINGS ─────────────────────────────────────────────────────────────────────────────
+
+readout:                       # when the first reading appears; changing these needs no retraining
+  confidence: 0.7              # regular hearts: how sure before the first reading (probability of
+                               # being within ±3 BPM, measured on validation); lower: sooner
+  slow_irregular_after_s: 4.0  # slow or irregular hearts: first reading not before this time
+  latest_s: 8.0                # heart sound present: a first reading by this time at the latest
+
+
+# ── 2. ALGORITHM (fixed by the trained model) ────────────────────────────────────────────────────
+
+weights: hr_v8                             # output/models/hr_v8_*.npz: TCN, scorer, calibration
+
+stream:
+  fs_hz: 4000
+  block_samples: 200                       # 50 ms per input block
+  frame_blocks: 5                          # tracker update every 5 blocks = 0.25 s
+  output_period_s: 1.0                     # one reading per second after the first
+
+frontend:                                  # block A
+  bands_hz: [[25, 50], [50, 100], [100, 200], [200, 400]]
+  filter_order: 2                          # Butterworth order per band edge
+  env_rate_hz: 100                         # log energy every 10 ms
+
+net:                                       # block B, causal TCN
+  norm_tau_s: 1.0                          # running-mean time constant of the input
+  channels: 8
+  kernel: 3
+  dilations: [1, 2, 4, 8, 16]              # receptive field 63 frames = 0.63 s
+
+features:                                  # block C
+  window_s: 4.0                            # longest analysis window
+  min_window_s: 1.0                        # no features before this
+  min_overlap_s: 0.8                       # NCCF valid only with this much overlap
+  s1_window_s: 2.0                         # 25-50 Hz (S1) band: window of its features,
+  s1_decimation: 2                         # stored at 100 / 2 = 50 Hz
+  s1_max_bpm: 250                          # band features used for candidate rates up to this
+
+grid:                                      # candidate heart rates: 232 states, 1 % apart
+  hr_min_bpm: 30
+  hr_max_bpm: 300
+  step_rel: 0.01
+
+scorer:                                    # block D
+  emission_beta: 0.35                      # weight of the scorer in the tracker
+  hidden: 16
+
+tracker:                                   # block E
+  sigma_rel_per_sqrt_s: 0.08               # HR drift, relative, per sqrt(second)
+  octave_prob: 0.002                       # chance per update of a jump to double or half
+  floor_prob: 0.0005                       # uniform re-initialisation per update
+  estimate_tol_rel: 0.05                   # estimate window and frame agreement, ±5 %
+
+rhythm:                                    # block R: beats picked from the activation
+  peak_min_rel: 0.4                        # local maxima of at least this x the window maximum
+  refractory_rel: 0.6                      # beats at least this x the estimate's period apart
+  min_intervals: 2                         # interval CV and beat-count HR need this many
+
+decision:                                  # block F, internal (re-validate when changed)
+  min_s: 1.5                               # no reading before this time
+  slow_bpm: 50                             # below: slow path
+  regular_max_cv: 0.10                     # picked-beat interval CV at or above: irregular path
+  slow_irregular_confidence: 0.9           # slow/irregular path: probability within ±10 BPM
+  conf_fine_bpm: 4.0                       # confidence of a regular reading: mass within ±4 BPM
+  conf_rough_bpm: 10.0                     # slow/irregular reading and forced reading: ±10 BPM
+  forced_min_mass: 0.3                     # forced reading at latest_s only above this mass
+  min_periodicity: 0.2                     # no reading below this ACF at the estimate's period
+  min_activation_sd: 0.03                  # no reading below this activation SD (silence, hum)

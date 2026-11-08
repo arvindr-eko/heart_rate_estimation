@@ -2,7 +2,7 @@
 
 import pytest
 
-from pcg_hr import config
+from training import config
 
 
 @pytest.fixture(scope="session")

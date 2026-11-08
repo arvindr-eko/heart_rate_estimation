@@ -1,8 +1,11 @@
-"""Block B, causal TCN: beat activation from band energies, one frame at a time.
+"""Block B, causal TCN: beat activation from band energies, one 10 ms frame at a time.
 
-Input per frame: log energies (n_bands,), minus a causal running mean per band. Output per
-frame: activation in [0, 1], high at each heartbeat. State: one delay line per layer holding
-dilation x (kernel - 1) past inputs, and the running mean.
+Input per frame: the 4 log energies minus a causal running mean per band (time constant
+norm_tau_s, so recording gain drops out). Output per frame: activation in [0, 1], high at each
+heartbeat. 5 dilated causal convolutions (kernel 3, dilations 1-16, 8 channels, ReLU, residual
+from layer 1) and a sigmoid output; receptive field 63 frames = 0.63 s; 913 weights.
+State: one delay line per layer holding dilation x (kernel - 1) past inputs, and the running
+mean. float32 throughout.
 """
 
 from dataclasses import dataclass
@@ -22,18 +25,24 @@ class NetState:
     buffers: list
 
 
+def weights_path(cfg: dict) -> Path:
+    """TCN weight file of the configured model: <models_dir>/<weights>_tcn.npz."""
+    return cfg["paths"]["models_dir"] / f"{cfg['weights']}_tcn.npz"
+
+
 def load_weights(path: Path) -> dict:
-    """Weights saved by train_net.export: conv<i>_w (out, in, kernel), conv<i>_b, out_w, out_b."""
+    """Weights saved by training.train: conv<i>_w (out, in, kernel), conv<i>_b, out_w, out_b."""
     return dict(np.load(path, allow_pickle=False))
 
 
 def init(cfg: dict, weights: dict | None = None) -> NetState:
-    """Empty streaming state; weights from models_dir unless given."""
+    """Empty streaming state; weights of the configured model unless given."""
     nc = cfg["net"]
-    w = weights or load_weights(cfg["paths"]["models_dir"] / nc["weights"])
+    w = weights or load_weights(weights_path(cfg))
     dilations = list(nc["dilations"])
     inputs = [w[f"conv{i}_w"].shape[1] for i in range(len(dilations))]
-    buffers = [np.zeros((c, d * (nc["kernel"] - 1))) for c, d in zip(inputs, dilations)]
+    buffers = [np.zeros((c, d * (nc["kernel"] - 1)), np.float32)
+               for c, d in zip(inputs, dilations)]
     return NetState(weights=w, dilations=dilations, kernel=nc["kernel"],
                     norm_alpha=1.0 / (nc["norm_tau_s"] * cfg["frontend"]["env_rate_hz"]),
                     run_mean=None, buffers=buffers)
@@ -42,8 +51,8 @@ def init(cfg: dict, weights: dict | None = None) -> NetState:
 def normalise(state: NetState, frame: np.ndarray) -> np.ndarray:
     """Subtract the causal running mean of each band (mean starts at the first frame)."""
     if state.run_mean is None:
-        state.run_mean = frame.copy()
-    state.run_mean += state.norm_alpha * (frame - state.run_mean)
+        state.run_mean = frame.astype(np.float32)
+    state.run_mean += np.float32(state.norm_alpha) * (frame - state.run_mean)
     return frame - state.run_mean
 
 
@@ -58,7 +67,7 @@ def step(state: NetState, x: np.ndarray) -> float:
         y = np.maximum(y, 0.0)
         state.buffers[i] = np.hstack([buf[:, 1:], x[:, None]]) if buf.shape[1] else buf
         x = y + x if i > 0 else y
-    return 1.0 / (1.0 + np.exp(-(w["out_w"] @ x + w["out_b"])))
+    return np.float32(1.0) / (np.float32(1.0) + np.exp(-(w["out_w"] @ x + w["out_b"])))
 
 
 def process(state: NetState, env: np.ndarray) -> np.ndarray:

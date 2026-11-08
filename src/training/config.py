@@ -1,6 +1,6 @@
-"""Config loading, variant merging and preflight checks."""
+"""Config loading (configs/device.yml and configs/training.yml), path resolution, validation and
+preflight checks."""
 
-import copy
 import logging
 from pathlib import Path
 
@@ -9,31 +9,20 @@ import yaml
 log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = PROJECT_ROOT / "config.yml"
+CONFIG_FILES = (PROJECT_ROOT / "configs" / "device.yml", PROJECT_ROOT / "configs" / "training.yml")
 
 
-def deep_merge(base: dict, override: dict) -> dict:
-    """Return base with override merged in recursively; neither input is modified."""
-    merged = copy.deepcopy(base)
-    for key, value in override.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = deep_merge(merged[key], value)
-        else:
-            merged[key] = copy.deepcopy(value)
-    return merged
-
-
-def load(path: str | Path = DEFAULT_CONFIG, variant: str | None = None,
-         overrides: dict | None = None) -> dict:
-    """Load the YAML config, apply a named variant and explicit overrides, resolve paths."""
-    with open(path) as f:
-        cfg = yaml.safe_load(f)
-    variants = cfg.pop("variants", {})
-    if variant is not None:
-        cfg = deep_merge(cfg, variants[variant])
-    if overrides:
-        cfg = deep_merge(cfg, overrides)
-    cfg["name"] = variant or "final"
+def load(files: tuple = CONFIG_FILES) -> dict:
+    """Load and merge the YAML configs (device settings, training settings); paths resolved
+    against the project root. A section may appear in one file only."""
+    cfg = {}
+    for path in files:
+        with open(path) as f:
+            part = yaml.safe_load(f)
+        clash = set(cfg) & set(part)
+        if clash:
+            raise ValueError(f"{Path(path).name}: sections also in another config: {sorted(clash)}")
+        cfg.update(part)
     cfg["paths"] = {k: PROJECT_ROOT / v for k, v in cfg["paths"].items()}
     validate(cfg)
     return cfg

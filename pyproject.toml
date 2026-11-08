@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dynamic = ["dependencies"]
 
 [project.scripts]
-pcg-hr = "pcg_hr.cli:main"
+pcg-hr = "training.cli:main"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

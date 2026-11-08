@@ -1,23 +1,23 @@
-# pcg_hr: heart rate from heart sounds on the stethoscope MCU
+# Heart rate from heart sounds on the stethoscope MCU
 
 Streaming heart rate (HR) estimation from the phonocardiogram (PCG, heart-sound audio, 4000 Hz,
-16-bit) for the PSoC 6 Cortex-M4F within 30 MIPS, 15 KB RAM and 5 KB flash. A small causal
-temporal convolutional network (TCN) marks heartbeats; autocorrelation and spectral features
-measure their spacing; a small scorer and a hidden Markov model (HMM) tracker pick the HR; a
-deadline rule decides when to show it: by 3 s normally, by 6 s when the heart may be slower than
-50 BPM, always by 8 s. Python reference implementation; every block has fixed-size state and
-maps to one C module (`c/include/hr_api.h`).
+16-bit) for the PSoC 6 Cortex-M4F, within 30 MIPS, 15 KB RAM and 5 KB flash. A small causal
+network marks heartbeats, periodicity features measure their spacing, a small scorer and a
+hidden Markov model (HMM) tracker pick the rate, and a readout decides when to show it: an
+accurate first reading at 2.5-4 s for regular rhythms, a later first reading (from 4 s) for slow
+or irregular hearts that then converges, one reading per second, and three runtime settings.
+Python reference implementation: the device code has fixed-size float32 state and maps one
+module to one C file.
 
 ## Contents
 1. Quick start
 2. Usage example
 3. Signal flow
-4. Data
-5. Results
-6. Integration on the PSoC 6
-7. Cost model
-8. Tests
-9. Layout, outputs and naming
+4. Settings
+5. Data, evaluation and results
+6. Resources
+7. Layout and outputs
+8. Development history
 
 ## 1. Quick start
 Environment (run once):
@@ -28,214 +28,195 @@ conda activate hr_estimation
 pip install -e .
 ```
 
-Run (from the repository root; recordings, ECG files and models under `data/` and `output/`):
+Run (recordings under `data/`, models and results under `output/`, both outside git):
 
 ```bash
 cd heart_rate_estimation
-pcg-hr split                              # grouped train / val / test split
-pcg-hr relabel                            # answer key from the three ECG leads
-pcg-hr train-net --augment                # TCN (block B)
-pcg-hr train-scorer --augment --features-name train_aug   # scorer (block D)
-pcg-hr eval --split test                  # final candidate on the held-out split
-pcg-hr --variant fast eval --split test   # fast setting (answer cutoff 2.5 s)
-pcg-hr eval --split test --stress         # synthetic noise, 4 types x 4 SNRs
-pcg-hr profile                            # PSoC 6 cost model
-pytest                                    # unit, pipeline, streaming, regression, budget
+pcg-hr prepare                         # split (created once) and ECG consensus labels
+pcg-hr train --out hr_v8               # network (B), scorer (D), readout calibration (F)
+pcg-hr evaluate --split val            # tuning split
+pcg-hr evaluate --split test           # held-out split
+pcg-hr evaluate --split test --stress  # noise and extreme-rate stress set
+pcg-hr evaluate --data <snapshot dir>  # another snapshot (e.g. unfiltered), evaluation only
+pcg-hr vectors                         # per-block reference vectors for the C port
+pcg-hr profile                         # PSoC 6 cost model
+pytest                                 # unit, streaming, corner-case, regression, budget tests
 ```
 
 ## 2. Usage example
 ```
-$ pcg-hr eval --split test
-15:34:45 final: first within 0.967, half/double 0.000, median answer 3.00 s (HR >= 50 BPM),
-         targets 8/8 -> 20261105_153445_final_test_final
+$ pcg-hr evaluate --split test --tag final
+03:06:09 FAIL regular_common.first_within_fine: value 0.877, target 0.92
+03:06:09 targets passed 9/12 -> 20261108_030609_hr_v8_test_final
 
 $ pcg-hr profile
- "mips": 15.9777696,
- "peak_block_ms": 25.196842666666665,
- "ram_bytes": 12848,
- "flash_bytes": 4538,
+ "mips": 3.3134296,
+ "ram_bytes": 14720,
  "within_budget": true
 ```
 
-`first within`: share of first readings within ±5 BPM or ±10 % of the reference HR
-(ANSI/AAMI EC13 tolerance). `median answer`: median time to the first reading.
+`regular_common.first_within_fine`: share of first readings within ±3 BPM of the ECG heart rate
+over the same seconds, for regular rhythms at 50-200 BPM. `mips`: million cycles per second.
 
 ## 3. Signal flow
 Key shapes: `PCG 4000 Hz, 200-sample blocks ─▶ band log energies (4, 100 Hz) ─▶ activation
-(100 Hz) ─▶ features (205 states x 24) every 0.25 s ─▶ log-likelihood (205) ─▶ posterior (205)
-─▶ HR (BPM), 1 reading per s`
+(100 Hz) ─▶ features (232 states x 17) every 0.25 s ─▶ log-likelihood (232) ─▶ posterior (232)
+─▶ HR (BPM): first reading when confident, then 1 per s`
 
 ```
-                   ┌──────────────────────────────────┐
-                   │ A  Front end                     │
-                   │    4 band-passes, log energy     │
-                   │    out: (4, 5) per 50 ms block   │
-                   └─────────────────┬────────────────┘
-                                     ▼
-                   ┌──────────────────────────────────┐
-                   │ B  Causal TCN, 913 weights       │
-                   │    0.63 s receptive field        │
-                   │    out: activation, 100 Hz       │
-                   └─────────────────┬────────────────┘
-                  ┌──────────────────┴────────────────────┐
-                  ▼                                       ▼
-┌──────────────────────────────────┐    ┌──────────────────────────────────┐
-│ C1 Features of activation        │    │ C2 Features of band-mean env     │
-│    ACF/NCCF/YIN/DFT, <= 4 s      │    │    (from A), same 12 features    │
-│    out: (205 states, 12)         │    │    out: (205 states, 12)         │
-└─────────────────┬────────────────┘    └─────────────────┬────────────────┘
-                  └──────────────────┬────────────────────┘
-                                     ▼
-                   ┌──────────────────────────────────┐
-                   │ D  Scorer MLP, 417 weights       │
-                   │    24 -> 16 -> 1 per state       │
-                   │    out: log-softmax (205)        │
-                   └─────────────────┬────────────────┘
-                                     ▼
-                   ┌──────────────────────────────────┐
-                   │ E  HMM tracker                   │
-                   │    205 states, 30-228 BPM        │
-                   │    out: posterior, every 0.25 s  │
-                   └─────────────────┬────────────────┘
-                                     ▼
-                   ┌──────────────────────────────────┐
-                   │ F  Deadline release              │
-                   │    3 s; 6 s if slow; 8 s max     │
-                   │    out: HR (BPM), then 1 per s   │
-                   └──────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ A  Front end                         │
+│    4 band-passes, log energy         │
+│    out: (4 bands, 5) per block       │
+└───────────────────┬──────────────────┘
+                    │ 4 log energies minus running mean
+                    ├──────────────────────────────────────────┐ 25-50 Hz band
+                    ▼                                          ▼
+┌──────────────────────────────────────┐     ┌──────────────────────────────────┐
+│ B  Causal TCN                        │     │ C  S1 band                       │
+│    913 weights, 0.63 s field         │     │    averaged to 50 Hz, last 2 s   │
+│    out: activation (100 Hz)          │     │    out: lag sums (100 lags)      │
+└───────────────────┬──────────────────┘     └─────────────────┬────────────────┘
+                    ▼                                          │
+┌──────────────────────────────────────┐                       │
+│ C  Periodicity features              │◀──────────────────────┘
+│    lag sums, last 4 s (400 lags)     │
+│    out: (232 states, 17) / 0.25 s    │
+└───────────────────┬──────────────────┘
+                    ▼
+┌──────────────────────────────────────┐
+│ D  Scorer MLP                        │
+│    17 -> 16 -> 1 per state           │
+│    out: log-likelihood (232)         │
+└───────────────────┬──────────────────┘
+                    ▼
+┌──────────────────────────────────────┐     ┌──────────────────────────────────┐
+│ E  HMM tracker                       │────▶│ R  Rhythm                        │
+│    232 states, 30-299 BPM            │     │    beats in the last 4 s of B    │
+│    out: posterior (232), HR          │     │    out: beat-interval CV         │
+└───────────────────┬──────────────────┘     └─────────────────┬────────────────┘
+                    ▼                                          │
+┌──────────────────────────────────────┐                       │
+│ F  Readout                           │◀──────────────────────┘
+│    gates; regular or slow/irr. path  │
+│    out: reading (BPM) or none        │
+└──────────────────────────────────────┘
 ```
 
 | Block | Module | What it does |
 |---|---|---|
-| A | `frontend.py` | 4 Butterworth band-passes (25-50, 50-100, 100-200, 200-400 Hz); log of the mean energy per 10 ms (4000 / 100 = 40 samples). |
-| B | `net.py` | Causal TCN: 5 layers, kernel 3, dilations 1-16, 8 channels; receptive field 1 + 2 x 31 = 63 frames = 0.63 s; 913 weights. Input: band energies minus a 1 s running mean. Output: activation per 10 ms, high at each beat. Trained so the autocorrelation of its output peaks at the true beat period (no beat labels). |
-| C | `features.py` | Window grows from 1 s to 4 s. For each HR state with period T: ACF at T, T/2, 2T and a flag for 2T fitting; NCCF and YIN at T; DFT at f, 2f, f/2; peak flag; ACF relative to its maximum; log(window / T). Computed on the activation and on the band-mean envelope: 24 values per state. |
-| D | `scorer.py` | MLP 24 → 16 → 1 with the same 417 weights for every state; log-softmax over the 205 states. HR is not an input. |
-| E | `tracker.py` | Update every 0.25 s; random walk 4 % per √s; jump to double or half with probability 0.002 per update; evidence = 0.35 x scorer log-probability. |
-| F | `release.py` | First reading when the scorer's probability within ±5 % of its best state agrees with the tracker and reaches 0.97 before the cutoff, then 0.9 falling to 0 at 8 s. Cutoff 3 s, or 6 s while the estimate or ≥ 30 % of the tracker probability is below 50 BPM. Then one reading per second. |
+| A | `device/frontend.py` | 4 Butterworth band-passes (25-50, 50-100, 100-200, 200-400 Hz), 2 biquads each, started in steady state for the first sample; log of the mean energy per 10 ms. |
+| B | `device/net.py` | Causal temporal convolutional network (TCN): 5 layers, kernel 3, dilations 1-16, 8 channels, 0.63 s receptive field; output near 1 at each beat. |
+| C | `device/features.py` | Lag sums updated per sample over the last 4 s of activation and the last 2 s of the 25-50 Hz band (S1, at 50 Hz); per frame, autocorrelation (ACF), normalised cross-correlation (NCCF) and YIN; 13 + 3 features per candidate rate, plus a flag; the S1-band features apply to candidates up to 250 BPM. |
+| D | `device/scorer.py` | Same 339-parameter MLP for every candidate rate; log-softmax over the 232 rates (30-299 BPM). |
+| E | `device/tracker.py` | Every 0.25 s: random walk 8 % per √s, half/double jump 0.002, evidence weight 0.35. |
+| R | `device/rhythm.py` | Beats picked from the activation (S2 suppressed using the tracker's period); beat-interval variation and beat-count rate. |
+| F | `device/readout.py` | Path per frame: slow (estimate below 50 BPM) or irregular (picked-beat variation ≥ 10 %) versus regular. Probability of the reading being right from the posterior mass and the periodicity (logistic, fitted on validation). Regular: first reading at `confidence`. Slow or irregular: from `slow_irregular_after_s` at probability 0.9 within ±10 BPM. No reading without heartbeats: activation ACF at the estimate's period below 0.2, or activation SD over the window below 0.03 (silence, mains hum). Forced at `latest_s`. |
 
-`estimator.py` composes A-F (`init`, `process(block)`); HR states: 205, log-spaced 1 % apart,
-30-228 BPM (`grid:` in `config.yml`).
+### How it works, step by step
+One call per 50 ms block of 200 audio samples (4000 Hz); a frame is 5 blocks (0.25 s).
 
-## 4. Data
-Snapshot `sq5_sweep_core500_20261008`: 2735 DUO3 recordings, PCG 4000 Hz, 17 s (longer ones
-truncated); raw ECG (three leads, 500 Hz) for the answer key only. Filtered at extraction on PCG
-quality ≥ 0.7 and ECG-PCG HR agreement ≤ 5 BPM: a clean set. Patient-derived; never committed.
+| Step | In | What happens | Out |
+|---|---|---|---|
+| A front end | 200 samples | 4 band-pass filters (25-50, 50-100, 100-200, 200-400 Hz); mean energy per 10 ms; log | 4 bands x 5 values |
+| B beat network | 4 log energies per 10 ms | subtract a 1 s running mean (gain drops out); 5-layer causal network that sees the last 0.63 s | 1 value per 10 ms in [0, 1], high at each beat (the activation) |
+| C features (per sample) | each activation value; the 25-50 Hz band averaged to 50 Hz | ring buffers of the last 4 s (400 values) and 2 s (100 values); lag sums: how much each signal matches itself shifted by k samples, updated per sample | running sums only |
+| C features (per frame) | the lag sums | for each of 232 candidate rates (period T = 6000 / BPM samples): 13 measures from the activation (similarity at T, T/2, 2T, 3T; normalised versions; exact peak position; periods in the window) and 3 from the S1 band (similarity at T, T/2, 2T; used up to 250 BPM, where S1 and S2 are still apart) plus a flag | 232 x 17 numbers |
+| D scorer | 232 x 17 | the same tiny network scores every candidate; softmax over candidates | 232 probabilities for this frame |
+| E tracker | previous belief + this frame | belief drifts slightly (rate changes up to about 8 % per √s), may jump to half or double with probability 0.002, then is multiplied by the frame's probabilities | 232 probabilities; estimate = weighted mean around the peak |
+| R rhythm | the last 4 s of activation, the estimate | picks the beats (peaks at least 0.6 periods apart) and measures how evenly they come | beat-interval variation |
+| F readout | estimate, belief, periodicity, activation SD, rhythm | decides when to show the first reading, then shows the estimate every second | reading (BPM, confidence) or nothing |
 
-| Split | Recordings | Users | HR median | < 50 BPM | ≥ 140 BPM | Atrial fibrillation | Use |
-|---|---|---|---|---|---|---|---|
-| train | 1366 | 593 | 106 | 121 | 331 | 34 | training (+ 5464 augmented copies) |
-| val | 544 | 238 | 106 | 48 | 135 | 14 | every design and threshold choice |
-| test | 825 | 342 | 106 | 68 | 213 | 18 | held out; evaluated once per candidate |
+**Half or double rate.** Each beat has two sounds (S1, S2), so a signal can look periodic at
+half the true period. Four safeguards: the features compare every candidate period T with T/2,
+2T and 3T, so the true period stands out from its multiples; the 25-50 Hz band, where S1
+dominates, repeats only at the true period even when S2 is as loud as S1; the tracker allows a
+jump to half or double only with low probability, so one misleading frame cannot flip the
+reading; and the first reading needs the frame's own best rate and the tracker to agree within
+5 %.
 
-- Splits grouped by `user_id` (no clinician account in two splits), stratified by 5 BPM bin.
-- Answer key (`output/labels/reference_v2.csv`): EFAST ECG HR; replaced by the ECG beat count on
-  14 recordings where all three leads count at least 1.5x the EFAST HR (EFAST counting one beat
-  per group of irregular beats: train 5, val 2, test 7). These form a separate "unheard beats"
-  group, reported apart from the main metrics (`sep_*`).
-- Augmentation (train only, 4 copies per recording): time warping at ECG R-peaks of 841
-  recordings with regular beats (only diastole stretched; 2352 copies, a third aimed at 30-50
-  BPM), rhythm jitter 3-15 % (613), noise white / mains hum / breath at 0-25 dB SNR (4359;
-  friction held out for testing), gain ±12 dB, spectral tilt (2755).
+**Regular, irregular, slow and fast hearts.**
+- Regular rhythm at a common rate: first reading as soon as the probability of being within
+  ±3 BPM reaches `confidence` (typically 2.5-3 s), then one per second.
+- Slow (estimate below 50 BPM: few beats per second) or irregular (picked beats vary by 10 % or
+  more, such as atrial fibrillation or extra beats): first reading not before
+  `slow_irregular_after_s` (4 s), when the probability of being within ±10 BPM reaches 0.9; the
+  following readings converge (within ±3 BPM for most recordings by 9 s).
+- Fast (up to 299 BPM): many beats per second, same path as regular rhythm.
+- No heart sound: silence and mains hum alone give no reading (the activation is flat or has no
+  periodicity). Noise that the network takes for beats (friction bursts, some white or breath
+  noise) can still give one (§5).
 
-## 5. Results
-Test split, main group (818 recordings; 7 unheard-beat recordings reported apart):
+## 4. Settings
+Runtime settings (`configs/device.yml`, part 1; no retraining):
 
-| | Default (cutoff 3.0 s) | Fast (cutoff 2.5 s) |
+| Setting | Effect | Default |
 |---|---|---|
-| First reading within tolerance | **96.7 %** | 96.5 % |
-| HR ≥ 50 / < 50 BPM | 96.7 / 97.1 % | 96.7 / 94.1 % |
-| Half/double errors | 0.0 % | 0.1 % |
-| Steady state (median of all readings) | 99.6 % | 99.6 % |
-| Bland-Altman 95 % limits (steady state) | ±2.6 BPM | ±2.7 BPM |
-| Clean ECG windows vs ECG HR over the same 4 s | 472 / 472 | 410 / 410 |
-| Median answer HR ≥ 50 (95th percentile); HR < 50; latest | 3.0 s (4.5 s); 6.0 s; 7.75 s | 2.5 s (4.4 s); 6.0 s; 7.75 s |
-| Unheard-beat group: reads the heard rate / the ECG count | 5 / 2 | 5 / 2 |
-| Targets met | 8 of 8 | 8 of 8 |
+| `confidence` | Regular hearts: probability the first reading must have of being within ±3 BPM. Lower: sooner and less accurate. | 0.7 |
+| `slow_irregular_after_s` | Slow or irregular hearts: earliest first reading. | 4.0 s |
+| `latest_s` | With a heart sound present, a reading by this time. | 8.0 s |
 
-First reading within tolerance under synthetic noise (test, 198 recordings per condition,
-default setting; SNR measured in 25-400 Hz):
+Effect of `confidence` (validation, regular rhythms at 50-200 BPM): 0.6 → first reading 2.75 s
+median, 84.3 % within ±3 BPM; 0.65 → 3.0 s, 85.0 %; 0.7 (default) → 3.0 s, 85.4 %. Internal
+constants (rate range, slow limit, regularity limit, certainty of the slow/irregular path,
+heart-sound gates) sit in part 2 (`decision`) and need re-validation when changed.
 
-| Noise | 20 dB | 10 dB | 5 dB | 0 dB |
-|---|---|---|---|---|
-| White | 98.0 % | 97.5 % | 97.0 % | 96.5 % |
-| Friction (not in training) | 97.5 % | 98.0 % | 97.0 % | 97.0 % |
-| Mains hum | 97.0 % | 97.0 % | 94.9 % | 94.4 % |
-| Breath | 97.5 % | 98.0 % | 96.5 % | 97.5 % |
+## 5. Data, evaluation and results
+- Data: snapshot `sq5_sweep_core500_20261008`, 2735 DUO3 recordings (17 s PCG, three ECG leads
+  at 500 Hz), selected on PCG quality ≥ 0.7 and ECG-PCG agreement ≤ 5 BPM. Split by clinician
+  account: 1366 train, 544 validation, 825 test. Patient-derived; never committed.
+- Reference: R-peaks by consensus of five NeuroKit2 detectors on three leads, gaps filled from a
+  single clean lead (`training/labels.py`); every reading is graded against the ECG HR over the
+  same seconds. Training adds 4 augmented copies per recording (time warping, speed-up to
+  200-300 BPM, rhythm jitter, noise, gain, tilt).
+- Buckets (from the ECG): regular (beat-interval variation < 5 %) at 50-200 BPM, slow (< 50 BPM),
+  irregular (≥ 5 % or atrial fibrillation), very fast (200-300 BPM, sped-up recordings only).
 
-Median answer under noise 3.0-3.25 s (HR ≥ 50 BPM). Validation (544): 95.0 % first within, 8 of
-8 targets. Study details and the methods tried: `hr_notes/hr_estimation_final_report.md` (not in
-the repository).
+Test (run `20261108_030609_hr_v8_test_final`; very fast from stress run
+`20261108_032254_hr_v8_test_final_stress`):
 
-## 6. Integration on the PSoC 6
-- **API** (`c/include/hr_api.h`, mirrored by `estimator.py`): `hr_init(state, params)` at good
-  contact, `hr_process_block(state, pcm[200], out)` every 50 ms with int16 PCG (scaled
-  pcm / 32768), `hr_reset(state)` on contact loss. `out`: status (measuring / reading), BPM,
-  confidence, time since start, new-reading flag. Runtime parameters `hr_params_t` carry the
-  `release:` knobs (cutoffs 3 / 6 / 8 s, 50 BPM boundary, thresholds; fast setting: cutoff
-  2.5 s, early confidence 0.95).
-- **Timing** (cost model, float32, 150 MHz): about 0.4 ms per call, and about 25 ms on every 5th
-  call, which carries features, scorer and tracker. Run the call in a task that tolerates a
-  25 ms burst per 250 ms, or split the frame work over the 5 calls.
-- **Memory**: all state in a caller-provided `hr_state_t` (12.8 KB float32, 10.3 KB fixed
-  point); no allocation. Feature memory layout: per input the 4 s history, one autocorrelation
-  array and the per-state DFT magnitude at f; other features computed per state on the fly.
-- **Checklist**: PCG path delivers 4000 Hz int16 in 200-sample blocks (or a buffer adapter);
-  start on good contact (time to first reading is measured from `hr_init`); reset on contact
-  loss; number format (float32 or fixed point) decided after the C prototype; golden vectors
-  (`pcg-hr vectors`) checked stage by stage: band energies, activation, tracker output per
-  frame, readings.
+| Bucket | Recordings | First reading, median | First reading accuracy | Later | Targets |
+|---|---|---|---|---|---|
+| regular, 50-200 BPM | 438 | 2.5 s (90 % by 4.0 s) | 87.7 % within ±3 BPM, 99.5 % within ±10 | 90.0 % within ±3 BPM at 4 s, 98.9 % at 9 s | 2 of 4 |
+| slow | 30 | 4.0 s | 100 % within ±10 BPM | 100 % within ±3 BPM at 9 s | 3 of 3 |
+| irregular or AF | 235 | 4.0 s | 76.2 % within ±10 BPM | 80.4 % within ±3 BPM at 9 s | 2 of 3 |
+| very fast (sped-up recordings) | 40 per rate | | 52.5-100 % within ±10 BPM | half/double 7.5 % | 0 of 2 |
+| all | 703 | 3.5 s | | 99.9 % with a reading by 10 s; half/double 0.2 % | 2 of 2 |
 
-## 7. Cost model
-`pcg-hr profile` (`cost_model.py`) counts the operations of every block per second at the worst
-case (full 4 s window), maps them to Cortex-M4F cycles (`profile:` in `config.yml`: fused
-multiply-add 3 cycles in float32, dual 16-bit multiply-accumulate 0.5 cycles in fixed point,
-divide and square root 14, exp / log 40 as an approximation, overhead x1.3), and sizes every
-buffer.
+Missed targets: regular first reading (92 %) and 4 s reading (92 %) within ±3 BPM, irregular first
+reading within ±10 BPM (90 %), very fast (sped-up recordings, where speeding up also moves S1 out
+of the 25-50 Hz band; synthetic heart sounds at 170-290 BPM give no half/double readings).
+Corner cases (synthetic: gain, DC offset, 33-220 BPM, loud S2, murmur, irregular beats, start-up
+noise, contact loss, mains hum with a heart; no reading for silence or hum alone) all pass. Noise
+alone still gives a reading in some cases (25 synthetic 17 s inputs per type: friction 25, breath
+13, white 5): a known limitation, tested as an expected failure. Unfiltered recordings:
+`pcg-hr evaluate --data <snapshot folder>` (pending a database pull).
 
-| Block | float32: cycles/s | fixed: cycles/s | RAM float32 | Flash |
-|---|---|---|---|---|
-| A front end | 0.71 M | 0.14 M | 80 B | 160 B |
-| B TCN | 0.37 M | 0.08 M | 2.0 KB | 913 B |
-| C features | 13.3 M | 4.7 M | 8.0 KB | 0 |
-| D scorer | 1.47 M | 0.30 M | 1.0 KB | 465 B |
-| E tracker | 0.11 M | 0.06 M | 1.7 KB | 0 |
-| Total | **16.0 M (of 30)** | **5.3 M** | **12.8 KB (of 15)** | **4.5 KB incl. 3 KB code estimate (of 5)** |
+## 6. Resources
+`pcg-hr profile` (planned C code, Cortex-M4F cycles, float32, 150 MHz): 3.3 M cycles/s of the 30 M
+budget; busiest 50 ms block 3.6 ms; RAM 14,720 of 15,360 bytes; flash 4,436 of 5,120 bytes (with
+a 3,000-byte code estimate). Every call runs blocks A, B and the per-sample part of C (0.5 ms);
+every fifth call adds the frame work of C, D, E, R and F. Estimates until measured on the target.
+Reference vectors for the C port (`pcg-hr vectors`, `output/vectors/`): every block's inputs and
+outputs on 8 synthetic cases (including silence and hum alone) and 3 test recordings.
 
-Estimates, not measurements: next levels are instruction counts of the compiled C code in an
-emulator, then the cycle counter on a PSoC 6 kit. The DFT at 3 multiples x 205 states x 400
-samples per input dominates.
-
-## 8. Tests
-`pytest` (about 12 s): unit checks on hand-written inputs (tolerance, octave errors, separate
-group, windowed ECG HR, release threshold, tracker, time warping), synthetic PCG end to end
-(value and answer-time window per HR), numpy TCN equal to PyTorch, golden regression on 40 test
-recordings against `output/golden/` (skipped without local data), cost model within budget.
-
-## 9. Layout, outputs and naming
+## 7. Layout and outputs
 ```
-pyproject.toml, requirements.txt, config.yml
-src/pcg_hr/      frontend, net, features, scorer, tracker, release, estimator   (device path)
-                 data, reference, augment, synth, train_net, train_scorer       (training)
-                 evaluate, plots, cost_model, cli                               (evaluation)
-tests/           pytest suite
-c/include/       hr_api.h (device API draft)
-notebooks/       hr_results.ipynb (thin driver, outputs cleared)
-data/, output/   local only, never committed
+configs/device.yml          what the stethoscope runs: user settings, algorithm constants
+configs/training.yml        data, split, labels, augmentation, training, evaluation, targets
+src/device/                 on-device algorithm (blocks A-F and R, estimator); ports to C 1:1
+src/training/               data, labels, augment, train, evaluate, cost_model, config, cli
+                            (never on the device)
+tests/                      pytest suite
+data/                       recordings (not in git)
+output/                     splits, labels, models, runs, caches, golden readings (not in git)
 ```
+A run folder `output/runs/<time>_<model>_<split>[_<tag>]/` holds `config.yml`,
+`per_record.csv`, `readings.json`, `summary.json` (metrics per bucket and group), `targets.json`
+(pass/fail), `run_info.json` (git commit, weight checksums, cost), figures and `strata.csv`;
+stress runs add `stress_by_condition.csv`.
 
-| Output | Content |
-|---|---|
-| `output/splits/split_v1.csv` | `output_filename`, `user_id`, `reference_bpm`, `hr_bin`, `fold` (0-9), `split` (train 0-4, val 5-6, test 7-9) |
-| `output/labels/reference_v2.csv` | answer key: `efast_ecg_bpm`, `ecg_rpeak_bpm` (median of three leads), `leads_agree`, `label_source` (`efast` / `ecg_rpeaks`), `reference_bpm` |
-| `output/models/hr_tcn.npz`, `hr_scorer.npz` | final weights (float32): `conv<i>_w` (out, in, 3), `conv<i>_b`, `out_w`, `out_b`; scorer `mean`, `std`, `w1` (24, 16), `b1`, `w2`, `b2` |
-| `output/runs/<YYYYMMDD>_<HHMMSS>_<variant>_<split>[_<tag>][_stress]/` | `config.yml` (resolved), `per_record.csv`, `readings.json` (`[time_s, bpm, confidence]` per reading), `summary.json`, `run_info.json` (inputs, cost-model totals), `stress_by_condition.csv` (stress runs) |
-| `output/golden/` | frozen final readings for the regression test |
-| `output/vectors/<case>.npz` | synthetic golden vectors: `pcm` (int16), `band_log_energy`, `activation`, `trace` (per frame: time, HR, confidence, frame HR, frame confidence), `readings` |
-| `output/cache/` | R-peak times per ECG lead (`rpeaks_<lead>.json`) and training caches; caches are named by a hash of the augmentation settings and the answer key, so changed inputs never reuse them |
-
-`summary.json` keys: `first_within`, `first_within_hr_ge_low` / `_low_hr` (split at 50 BPM),
-`first_half_double`, `steady_within`, `steady_mae`, `steady_bias`, `steady_loa` (1.96 x SD),
-`ttfr_median_hr_ge_low_s`, `ttfr_p95_hr_ge_low_s`, `ttfr_median_low_hr_s`, `ttfr_max_s`,
-`acc_at_<t>s` (share of recordings with a correct reading by t), `clean_window_n` /
-`clean_window_first_within`, `sep_n` / `sep_first_within`, `targets_passed`.
+## 8. Development history
+This branch holds the selected candidate only. The other approaches evaluated during development
+(autocorrelation and GCC-PHAT front ends, end-to-end networks, alternative release rules and
+feature sets) are kept on branch `arvind/prototype`.

@@ -1,15 +1,19 @@
 """Unit checks on hand-written inputs with known outputs."""
 
+import ast
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
-from pcg_hr import augment, evaluate, features, reference, release, synth, tracker
+from device import features, readout, rhythm, tracker
+from training import augment, evaluate, labels
 
 
 def test_hr_grid(cfg):
-    """205 log-spaced states, 1 % apart, from 30 BPM."""
+    """232 log-spaced states, 1 % apart, from 30 BPM to 298.8 BPM."""
     grid = features.hr_grid(cfg)
-    assert grid.size == 205 and grid[0] == 30
+    assert grid.size == 232 and grid[0] == 30 and 298 < grid[-1] <= 300
     assert np.allclose(grid[1:] / grid[:-1], 1.01)
 
 
@@ -21,49 +25,99 @@ def test_tolerance_and_octaves(cfg):
     assert evaluate.is_half_double(cfg, est, ref).tolist() == [False, False, True, True]
 
 
-def test_separate_group_excluded(cfg):
-    """Recordings labelled with the ECG beat count are left out of the main metrics."""
-    rec = pd.DataFrame({"output_filename": list("abcd"),
-                        "readings": [[(3.0, 60.0, 1.0)], [(3.0, 100.0, 1.0)],
-                                     [(3.0, 40.0, 1.0)], [(3.0, 70.0, 1.0)]],
-                        "reference_bpm": [60.0, 100.0, 80.0, 90.0],
-                        "label_source": ["efast", "efast", "ecg_rpeaks", "efast"]})
-    s = evaluate.summarize(cfg, evaluate.score_records(cfg, rec))
-    assert s["n"] == 3 and abs(s["first_within"] - 2 / 3) < 1e-12
-    assert s["sep_n"] == 1 and s["sep_first_within"] == 0.0
+def test_grading_groups_and_errors(cfg):
+    """Readings graded against the ECG over the same seconds; only the graded group counts."""
+    beats = {"a": np.arange(0.5, 17, 1.0), "b": np.arange(0.5, 17, 0.5), "c": np.arange(0, 17, 1.0)}
+    rec = pd.DataFrame({
+        "output_filename": ["a", "b", "c"],
+        "readings": [[(3.0, 62.0, 1.0), (4.0, 61.0, 1.0)], [(3.0, 140.0, 1.0)],
+                     [(3.0, 60.0, 1.0)]],
+        "beats": [None, None, None], "case": ["", "", ""],
+        "reference_bpm": [60.0, 120.0, 60.0], "efast_bpm": [60.0, 120.0, 30.0],
+        "ecg_trusted": [True, True, True], "unheard": [False, False, True],
+        "rhythm": ["Normal Sinus Rhythm"] * 3})
+    per_rec, per_read = evaluate.grade(cfg, rec, {k: {"beats": v} for k, v in beats.items()})
+    assert per_rec["group"].tolist() == ["graded", "graded", "unheard"]
+    assert np.allclose(per_rec["first_err"], [2.0, 20.0, 0.0])
+    assert per_rec["converge_s"].tolist()[:2] == [3.0, np.inf]
+    s = evaluate.summarize(cfg, per_rec, per_read)
+    assert s["all.n"] == 2 and s["all.first_within_fine"] == 0.5
+    assert s["regular_common.later_within_fine"] == 1.0 and s["unheard.n"] == 1
 
 
-def test_windowed_hr():
-    """HR from the beats in the window; widened to two beats; NaN without two beats."""
+def test_window_hr():
+    """HR over the window; widened to the nearest beats for min_intervals; NaN when short."""
     beats = np.arange(0.3, 17, 1.0)
-    assert abs(reference.windowed_hr(beats, 4.0, 4.0) - 60) < 1e-9
-    assert abs(reference.windowed_hr(np.array([0.5, 2.5, 4.5]), 1.0, 4.0) - 30) < 1e-9
-    assert np.isnan(reference.windowed_hr(np.array([1.0]), 3.0, 4.0))
+    assert abs(labels.window_hr(beats, 4.0, 4.0, 3) - 60) < 1e-9
+    slow = np.array([0.5, 2.0, 3.5, 5.0, 6.5])
+    assert abs(labels.window_hr(slow, 3.0, 4.0, 3) - 40) < 1e-9
+    assert np.isnan(labels.window_hr(np.array([1.0, 2.0]), 3.0, 4.0, 3))
 
 
-def test_release_threshold(cfg):
-    """c_early before the cutoff, c_cutoff at the cutoff, 0 at max_s; slow hearts wait to 6 s."""
-    rel = cfg["release"]
-    assert release.threshold(rel, 2.0, slow=False) == rel["c_early"]
-    assert abs(release.threshold(rel, rel["default_s"], slow=False) - rel["c_cutoff"]) < 1e-12
-    assert release.threshold(rel, rel["max_s"], slow=False) == 0.0
-    assert release.threshold(rel, 5.0, slow=True) == rel["c_early"]
+def test_readout_rules(cfg):
+    """Regular path at `confidence`; slow or irregular path not before slow_irregular_after_s;
+    forced reading at latest_s only with enough mass; no reading without periodicity."""
+    rd, dc, grid = cfg["readout"], cfg["decision"], features.hr_grid(cfg)
+    cal = readout.Calibration(fine=np.array([-5.0, 10.0, 0.0]), rough=np.array([-5.0, 10.0, 0.0]))
+
+    def posterior(hr, spread_bpm):
+        """Uniform posterior mass over the states within ±spread_bpm of hr."""
+        p = (np.abs(grid - hr) <= spread_bpm).astype(float)
+        return p / p.sum()
+
+    def due(post, hr, t, cv=0.02, acf=0.6, frame_hr=None, sd=0.2):
+        """first_due for one frame."""
+        a = readout.assess(cfg, cal, post, grid, hr, hr if frame_hr is None else frame_hr, cv, acf)
+        return readout.first_due(cfg, a, acf, sd, hr, t)
+
+    assert due(posterior(72, 1), 72, 3.0)
+    assert not due(posterior(72, 1), 72, dc["min_s"] - 0.25)
+    assert not due(posterior(72, 1), 72, 3.0, frame_hr=90)
+    assert not due(posterior(72, 1), 72, 3.0, acf=0.0)
+    assert not due(posterior(72, 1), 72, 3.0, sd=dc["min_activation_sd"] - 0.01)
+    assert not due(posterior(72, 8), 72, 3.0)
+    assert not due(posterior(40, 1), 40, rd["slow_irregular_after_s"] - 0.5)
+    assert due(posterior(40, 1), 40, rd["slow_irregular_after_s"])
+    assert not due(posterior(72, 1), 72, 3.0, cv=0.2)
+    assert due(posterior(72, 8), 72, rd["latest_s"])
+    assert not due(np.full(grid.size, 1 / grid.size), 72, rd["latest_s"])
+
+
+def test_rhythm_beats():
+    """Beat picking keeps one peak per period (S2 suppressed); CV and beat-count HR."""
+    act = np.zeros(400)
+    for start in range(10, 400, 80):            # beats every 0.8 s at 100 Hz = 75 BPM
+        act[start] = 1.0
+        act[start + 30] = 0.5                    # S2-like peak 0.3 s later
+    beats = rhythm.pick_beats(act, 80.0, 0.4, 0.6)
+    assert beats.tolist() == list(range(10, 400, 80))
+    cv, hr = rhythm.analyse(act, 100.0, 75.0, {"peak_min_rel": 0.4, "refractory_rel": 0.6,
+                                               "min_intervals": 2})
+    assert abs(cv) < 1e-12 and abs(hr - 75.0) < 1e-9
 
 
 def test_tracker_estimate(cfg):
-    """A posterior concentrated on one state gives that state's HR with confidence 1."""
+    """A posterior concentrated on one state gives that state's HR."""
     trk = tracker.init(cfg, 0.25)
     trk.posterior = np.zeros(trk.hr.size)
     trk.posterior[100] = 1.0
-    hr, conf = tracker.estimate(trk)
-    assert abs(hr - trk.hr[100]) < 1e-9 and abs(conf - 1.0) < 1e-12
+    assert abs(tracker.estimate(trk) - trk.hr[100]) < 1e-3
 
 
 def test_time_warp(cfg):
     """Warping 70 BPM by 0.6 gives 42 BPM beats and sample-continuous joins."""
-    audio, s1 = synth.pcg(70, seed=1, interval_cv=0.0)
+    audio, s1 = augment.synthetic_pcg(70, seed=1, interval_cv=0.0)
     beats = s1[s1 > 0.05] - 0.05
     out, new_beats = augment.time_warp(audio, 4000, beats, 0.6, 0.0, cfg,
                                        np.random.default_rng(0))
     assert abs(60 / np.diff(new_beats).mean() - 42.0) < 0.1
     assert np.abs(np.diff(out)).max() <= np.abs(np.diff(audio)).max() + 1e-6
+
+
+def test_device_never_imports_training():
+    """The on-device package depends on nothing in training (it ports to C on its own)."""
+    for path in (Path(__file__).resolve().parents[1] / "src" / "device").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            names = ([node.module or ""] if isinstance(node, ast.ImportFrom)
+                     else [a.name for a in node.names] if isinstance(node, ast.Import) else [])
+            assert not any(n.split(".")[0] == "training" for n in names), path.name
