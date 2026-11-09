@@ -42,7 +42,7 @@ BUCKET_COLORS = {"regular_common": "#2a78d6", "slow": "#eb6834", "irregular": "#
 INK, MUTED, GRID = "#1f1f1e", "#6b6a64", "#e4e3de"
 OTHER_KEYS = ("n", "coverage", "ttfr_median_s", "first_ec13")  # metrics without an ECG reference
 STRATA = ["hardware_type", "firmware_revision", "mains_filter", "rhythm", "hr_band_10"]
-STRESS = {                                    # stress protocol (pcg-hr evaluate --stress)
+STRESS = {                                    # stress protocol (hr-estimation evaluate --stress)
     "seed": 7,
     "noise_records": 200,                     # random recordings x noise types x SNRs; every
     "noise_types": ["white", "friction", "hum", "breath"],  # slow recording gets the same set

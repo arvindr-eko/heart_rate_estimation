@@ -11,7 +11,7 @@ paths:
   wav_dir: data/sq5_sweep_core500_20261008/wavs
   ecg_dir: data/sq5_sweep_core500_20261008/ecg
   split_manifest: output/splits/split_v1.csv
-  labels: output/labels/ecg_labels.csv     # label table written by `pcg-hr prepare`
+  labels: output/labels/ecg_labels.csv     # label table written by `hr-estimation prepare`
   runs_dir: output/runs
   models_dir: output/models
   cache_dir: output/cache

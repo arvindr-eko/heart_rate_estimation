@@ -13,11 +13,13 @@ module to one C file.
 1. Quick start
 2. Usage example
 3. Signal flow
-4. Settings
-5. Data, evaluation and results
-6. Resources
-7. Layout and outputs
-8. Development history
+4. Device reference (`src/device/`)
+5. Training and evaluation (`src/training/`)
+6. Settings
+7. Data, evaluation and results
+8. Resources
+9. Layout and outputs
+10. Development history
 
 ## 1. Quick start
 Environment (run once):
@@ -32,24 +34,24 @@ Run (recordings under `data/`, models and results under `output/`, both outside 
 
 ```bash
 cd heart_rate_estimation
-pcg-hr prepare                         # split (created once) and ECG consensus labels
-pcg-hr train --out hr_v8               # network (B), scorer (D), readout calibration (F)
-pcg-hr evaluate --split val            # tuning split
-pcg-hr evaluate --split test           # held-out split
-pcg-hr evaluate --split test --stress  # noise and extreme-rate stress set
-pcg-hr evaluate --data <snapshot dir>  # another snapshot (e.g. unfiltered), evaluation only
-pcg-hr vectors                         # per-block reference vectors for the C port
-pcg-hr profile                         # PSoC 6 cost model
-pytest                                 # unit, streaming, corner-case, regression, budget tests
+hr-estimation prepare                         # split (created once) and ECG consensus labels
+hr-estimation train --out hr_v8               # network (B), scorer (D), readout calibration (F)
+hr-estimation evaluate --split val            # tuning split
+hr-estimation evaluate --split test           # held-out split
+hr-estimation evaluate --split test --stress  # noise and extreme-rate stress set
+hr-estimation evaluate --data <snapshot dir>  # another snapshot (e.g. unfiltered), evaluation only
+hr-estimation vectors                         # per-block reference vectors for the C port
+hr-estimation profile                         # PSoC 6 cost model
+pytest                                        # unit, streaming, corner-case, golden, budget tests
 ```
 
 ## 2. Usage example
 ```
-$ pcg-hr evaluate --split test --tag final
+$ hr-estimation evaluate --split test --tag final
 03:06:09 FAIL regular_common.first_within_fine: value 0.877, target 0.92
 03:06:09 targets passed 9/12 -> 20261108_030609_hr_v8_test_final
 
-$ pcg-hr profile
+$ hr-estimation profile
  "mips": 3.3134296,
  "ram_bytes": 14720,
  "within_budget": true
@@ -145,9 +147,89 @@ reading; and the first reading needs the frame's own best rate and the tracker t
 - Fast (up to 299 BPM): many beats per second, same path as regular rhythm.
 - No heart sound: silence and mains hum alone give no reading (the activation is flat or has no
   periodicity). Noise that the network takes for beats (friction bursts, some white or breath
-  noise) can still give one (§5).
+  noise) can still give one (§7).
 
-## 4. Settings
+## 4. Device reference (`src/device/`)
+The algorithm the stethoscope runs, as the Python reference for the C port. Each module is one
+block: a state dataclass, `init` and a per-call function. State is float32 with sizes fixed at
+`init`; weights are loaded at `init`; no other file access. `device` never imports `training`
+(tested).
+
+Usage, here on a synthetic 72 BPM signal (real output):
+
+```python
+from device import estimator
+from training import augment, config
+
+cfg = config.load()                                     # configs/device.yml + training.yml
+audio, _ = augment.synthetic_pcg(72, duration_s=10.0)   # or a recording: float, 4000 Hz, [-1, 1]
+state = estimator.init(cfg)                             # all block states; again after contact loss
+block = cfg["stream"]["block_samples"]                  # 200 samples = 50 ms
+for start in range(0, audio.size - block + 1, block):
+    reading = estimator.process(state, audio[start:start + block])
+    if reading is not None:                             # (t_s, bpm, confidence)
+        print("t %.2f s  %.1f BPM  confidence %.2f" % reading)
+```
+```
+t 2.00 s  71.8 BPM  confidence 0.84
+t 3.00 s  71.3 BPM  confidence 0.96
+...
+t 10.00 s  72.8 BPM  confidence 0.98
+```
+
+| Module | Block | Called | In → out | State |
+|---|---|---|---|---|
+| `estimator.py` | all | `init(cfg)`; `process(state, block)` every 50 ms; `run(cfg, audio)` for a whole recording | 200 samples → reading `(t_s, bpm, confidence)` or `None` | all block states, block counter |
+| `frontend.py` | A | `process(state, block)` per block | 200 samples → (4, 5) log energies | 4 bands x 2 biquads x 2 values |
+| `net.py` | B | `normalise(state, frame)`, `step(state, x)` per 10 ms | 4 log energies → activation in [0, 1] | running mean (4), one delay line per layer |
+| `features.py` | C | `push(state, x)` per sample; `compute(state)` per frame; `hr_grid(cfg)` | activation or 25-50 Hz band → (232, 13) per frame | ring buffer and lag sums: 400 (activation), 100 (S1 band) |
+| `scorer.py` | D | `log_emission(model, feats)` per frame | (232, 17) → log-likelihood (232) | weights only |
+| `tracker.py` | E | `update(state, log_emission)`, `estimate(state)` per frame | (232) → posterior (232), HR | posterior (232) |
+| `rhythm.py` | R | `analyse(window, rate_hz, hr, cfg)` per frame | 4 s of activation → interval CV, beat-count HR | none |
+| `readout.py` | F | `assess`, `first_due`, `schedule` per frame | posterior, HR, gates, CV → reading or none | times of the first and the latest reading |
+
+`estimator.process` runs A, B and the per-sample update of C on every block; every fifth block
+also `scorer_input` (C: 13 activation features, 3 S1-band features, flag), D, E, the two gate
+values (`periodicity`, `activation_sd`), R and F.
+
+## 5. Training and evaluation (`src/training/`)
+Everything around the device code: data, ECG labels, training, evaluation and tools; runs on a
+workstation or SageMaker, never on the stethoscope. One command, `hr-estimation`
+(`training/cli.py`), one module call per step.
+
+| Step | Command | Modules | Writes |
+|---|---|---|---|
+| 1. Split and labels | `hr-estimation prepare` | `data` (split by clinician account, once), `labels` (ECG R-peak consensus) | `output/splits/split_v1.csv`, `output/labels/ecg_labels.csv` |
+| 2. Train | `hr-estimation train --out NAME` | `train`, `augment`; scorer inputs streamed through `device` | `output/models/NAME_tcn.npz`, `_scorer.npz`, `_calibration.npz` |
+| 3. Select the model | `weights: NAME` in `configs/device.yml`, or `--weights NAME` per command | | |
+| 4. Tune on validation | `hr-estimation evaluate --split val` | `evaluate` (every recording streamed through `device.estimator`) | `output/runs/<time>_NAME_val/` |
+| 5. Test, once per candidate | `hr-estimation evaluate --split test`, then with `--stress` | `evaluate`, `augment` (stress conditions) | `output/runs/<time>_NAME_test[_stress]/` |
+| 6. Other snapshot | `hr-estimation evaluate --data <dir>` | `labels.external`, `evaluate` | `output/runs/<time>_NAME_ext_<dir>/` |
+| 7. Golden readings | copy the test run's `readings.json` to `output/golden/NAME_test_readings.json` | read by `tests/test_regression.py` | |
+| 8. C port data | `hr-estimation vectors` | `vectors` | `output/vectors/*.npz` |
+| 9. Budget | `hr-estimation profile` | `cost_model` | printed table and totals |
+
+What a change needs:
+- `readout` settings: nothing; evaluate on validation for the trade-off.
+- `decision`, `tracker`, `rhythm`, `scorer.emission_beta`: `train --calibrate-only` (the
+  calibration depends on the posterior), then evaluate on validation.
+- S1-band or scorer settings: `train --scorer-only --weights BASE --out NEW` (keeps the network of
+  `BASE`).
+- `frontend`, `net`, `features`, `grid`: `train --out NEW` (network and scorer depend on them).
+
+| Module | Role |
+|---|---|
+| `config.py` | Loads and merges the two configs, resolves paths, preflight checks |
+| `data.py` | Manifest, grouped split by clinician account, WAV loading, parallel map over recordings |
+| `labels.py` | ECG R-peaks (five NeuroKit2 detectors, three leads), reference HR per reading, other snapshots |
+| `augment.py` | Synthetic PCG, noise at a set SNR, time warping and speed-up (training and stress) |
+| `train.py` | Network (PyTorch, exported to numpy), scorer, readout calibration |
+| `evaluate.py` | Streaming evaluation, grading per bucket, targets, stress protocol, figures, run folder |
+| `cost_model.py` | PSoC 6 estimate of cycles, RAM and flash per block |
+| `vectors.py` | Per-block reference vectors for the C port |
+| `cli.py` | The `hr-estimation` command |
+
+## 6. Settings
 Runtime settings (`configs/device.yml`, part 1; no retraining):
 
 | Setting | Effect | Default |
@@ -161,7 +243,7 @@ median, 84.3 % within ±3 BPM; 0.65 → 3.0 s, 85.0 %; 0.7 (default) → 3.0 s, 
 constants (rate range, slow limit, regularity limit, certainty of the slow/irregular path,
 heart-sound gates) sit in part 2 (`decision`) and need re-validation when changed.
 
-## 5. Data, evaluation and results
+## 7. Data, evaluation and results
 - Data: snapshot `sq5_sweep_core500_20261008`, 2735 DUO3 recordings (17 s PCG, three ECG leads
   at 500 Hz), selected on PCG quality ≥ 0.7 and ECG-PCG agreement ≤ 5 BPM. Split by clinician
   account: 1366 train, 544 validation, 825 test. Patient-derived; never committed.
@@ -190,22 +272,24 @@ Corner cases (synthetic: gain, DC offset, 33-220 BPM, loud S2, murmur, irregular
 noise, contact loss, mains hum with a heart; no reading for silence or hum alone) all pass. Noise
 alone still gives a reading in some cases (25 synthetic 17 s inputs per type: friction 25, breath
 13, white 5): a known limitation, tested as an expected failure. Unfiltered recordings:
-`pcg-hr evaluate --data <snapshot folder>` (pending a database pull).
+`hr-estimation evaluate --data <snapshot folder>` (pending a database pull).
 
-## 6. Resources
-`pcg-hr profile` (planned C code, Cortex-M4F cycles, float32, 150 MHz): 3.3 M cycles/s of the 30 M
-budget; busiest 50 ms block 3.6 ms; RAM 14,720 of 15,360 bytes; flash 4,436 of 5,120 bytes (with
-a 3,000-byte code estimate). Every call runs blocks A, B and the per-sample part of C (0.5 ms);
-every fifth call adds the frame work of C, D, E, R and F. Estimates until measured on the target.
-Reference vectors for the C port (`pcg-hr vectors`, `output/vectors/`): every block's inputs and
-outputs on 8 synthetic cases (including silence and hum alone) and 3 test recordings.
+## 8. Resources
+`hr-estimation profile` (planned C code, Cortex-M4F cycles, float32, 150 MHz): 3.3 M cycles/s
+of the 30 M budget; busiest 50 ms block 3.6 ms; RAM 14,720 of 15,360 bytes; flash 4,436 of 5,120
+bytes (with a 3,000-byte code estimate). Every call runs blocks A, B and the per-sample part of C
+(0.5 ms); every fifth call adds the frame work of C, D, E, R and F. Estimates until measured on
+the target. Reference vectors for the C port (`hr-estimation vectors`, `output/vectors/`): every
+block's inputs and outputs on 8 synthetic cases (including silence and hum alone) and 3 test
+recordings.
 
-## 7. Layout and outputs
+## 9. Layout and outputs
 ```
 configs/device.yml          what the stethoscope runs: user settings, algorithm constants
 configs/training.yml        data, split, labels, augmentation, training, evaluation, targets
 src/device/                 on-device algorithm (blocks A-F and R, estimator); ports to C 1:1
-src/training/               data, labels, augment, train, evaluate, cost_model, config, cli
+src/training/               config, data, labels, augment, train, evaluate, cost_model, vectors,
+                            cli
                             (never on the device)
 tests/                      pytest suite
 data/                       recordings (not in git)
@@ -216,7 +300,7 @@ A run folder `output/runs/<time>_<model>_<split>[_<tag>]/` holds `config.yml`,
 (pass/fail), `run_info.json` (git commit, weight checksums, cost), figures and `strata.csv`;
 stress runs add `stress_by_condition.csv`.
 
-## 8. Development history
-This branch holds the selected candidate only. The other approaches evaluated during development
+## 10. Development history
+`main` holds the selected candidate only. The other approaches evaluated during development
 (autocorrelation and GCC-PHAT front ends, end-to-end networks, alternative release rules and
 feature sets) are kept on branch `arvind/prototype`.

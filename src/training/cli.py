@@ -1,12 +1,14 @@
-"""Command line `pcg-hr`.
+"""Command line `hr-estimation` (installed by `pip install -e .`).
 
-    pcg-hr prepare                               split (created once) and ECG label table
-    pcg-hr train [--scorer-only] [--out NAME]    TCN, scorer, calibration -> models/NAME_*.npz
-    pcg-hr train --calibrate-only [--weights NAME]  refit the readout calibration only
-    pcg-hr evaluate [--split val|test] [--stress] [--weights NAME] [--tag TAG]
-    pcg-hr evaluate --data SNAPSHOT_DIR       another snapshot (e.g. unfiltered), evaluation only
-    pcg-hr vectors                            per-block reference vectors for the C port
-    pcg-hr profile [--format float32|fixed] [--weights NAME]
+    hr-estimation prepare                             split (created once) and ECG label table
+    hr-estimation train [--out NAME] [--scorer-only]  TCN, scorer, calibration: NAME_*.npz
+    hr-estimation train --calibrate-only              refit the readout calibration only
+    hr-estimation evaluate [--split train|val|test] [--stress] [--tag TAG]
+    hr-estimation evaluate --data SNAPSHOT_DIR        another snapshot (e.g. unfiltered)
+    hr-estimation vectors                             per-block reference vectors for the C port
+    hr-estimation profile [--format float32|fixed]    PSoC 6 cost model against the budget
+
+train, evaluate and profile take --weights NAME (default: config `weights`).
 """
 
 import argparse
@@ -16,7 +18,7 @@ from pathlib import Path
 
 from training import config, cost_model, data, evaluate, labels, train, vectors
 
-log = logging.getLogger("pcg-hr")
+log = logging.getLogger(__name__)
 
 
 def cmd_prepare(args: argparse.Namespace, cfg: dict) -> None:
@@ -40,7 +42,8 @@ def cmd_train(args: argparse.Namespace, cfg: dict) -> None:
 
 
 def cmd_evaluate(args: argparse.Namespace, cfg: dict) -> None:
-    """Evaluate one split (or its stress set); log the targets that failed and the run folder."""
+    """Evaluate one split, its stress set or another snapshot (--data); log the failed targets
+    and the run folder."""
     config.preflight(cfg)
     if args.data:
         ext, df = labels.external(cfg, args.data)
@@ -76,14 +79,16 @@ def main() -> None:
     sub = parser.add_subparsers(required=True)
     sub.add_parser("prepare").set_defaults(func=cmd_prepare)
     tr = sub.add_parser("train")
-    tr.add_argument("--scorer-only", action="store_true", help="keep the configured TCN")
+    tr.add_argument("--scorer-only", action="store_true",
+                    help="reuse the TCN of the configured model")
     tr.add_argument("--out", default="new", help="model name of the new weights")
     tr.add_argument("--calibrate-only", action="store_true",
                     help="refit the readout calibration of the configured model on validation")
     tr.set_defaults(func=cmd_train)
     ev = sub.add_parser("evaluate")
     ev.add_argument("--split", default="val", choices=["train", "val", "test"])
-    ev.add_argument("--stress", action="store_true", help="noise stress set of the split")
+    ev.add_argument("--stress", action="store_true",
+                    help="stress set of the split: noise, slow, rate")
     ev.add_argument("--tag", default="", help="suffix of the run folder name")
     ev.add_argument("--data", default=None, help="snapshot folder (manifest.csv, wavs/, ecg/)")
     ev.set_defaults(func=cmd_evaluate)
