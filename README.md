@@ -15,11 +15,12 @@ module to one C file.
 3. Signal flow
 4. Device reference (`src/device/`)
 5. Training and evaluation (`src/training/`)
-6. Settings
-7. Data, evaluation and results
-8. Resources
-9. Layout and outputs
-10. Development history
+6. C port (`c/`)
+7. Settings
+8. Data, evaluation and results
+9. Resources
+10. Layout and outputs
+11. Development history
 
 ## 1. Quick start
 Environment (run once):
@@ -41,6 +42,7 @@ hr-estimation evaluate --split test           # held-out split
 hr-estimation evaluate --split test --stress  # noise and extreme-rate stress set
 hr-estimation evaluate --data <snapshot dir>  # another snapshot (e.g. unfiltered), evaluation only
 hr-estimation vectors                         # per-block reference vectors for the C port
+hr-estimation c-model                         # C model files (sizes, coefficients, weights)
 hr-estimation profile                         # PSoC 6 cost model
 pytest                                        # unit, streaming, corner-case, golden, budget tests
 ```
@@ -147,7 +149,7 @@ reading; and the first reading needs the frame's own best rate and the tracker t
 - Fast (up to 299 BPM): many beats per second, same path as regular rhythm.
 - No heart sound: silence and mains hum alone give no reading (the activation is flat or has no
   periodicity). Noise that the network takes for beats (friction bursts, some white or breath
-  noise) can still give one (§7).
+  noise) can still give one (§8).
 
 ## 4. Device reference (`src/device/`)
 The algorithm the stethoscope runs, as the Python reference for the C port. Each module is one
@@ -206,7 +208,7 @@ workstation or SageMaker, never on the stethoscope. One command, `hr-estimation`
 | 5. Test, once per candidate | `hr-estimation evaluate --split test`, then with `--stress` | `evaluate`, `augment` (stress conditions) | `output/runs/<time>_NAME_test[_stress]/` |
 | 6. Other snapshot | `hr-estimation evaluate --data <dir>` | `labels.external`, `evaluate` | `output/runs/<time>_NAME_ext_<dir>/` |
 | 7. Golden readings | copy the test run's `readings.json` to `output/golden/NAME_test_readings.json` | read by `tests/test_regression.py` | |
-| 8. C port data | `hr-estimation vectors` | `vectors` | `output/vectors/*.npz` |
+| 8. C port data | `hr-estimation vectors`, `hr-estimation c-model` | `vectors`, `c_model` | `output/vectors/*.npz`, `c/build/generated/` |
 | 9. Budget | `hr-estimation profile` | `cost_model` | printed table and totals |
 
 What a change needs:
@@ -227,9 +229,95 @@ What a change needs:
 | `evaluate.py` | Streaming evaluation, grading per bucket, targets, stress protocol, figures, run folder |
 | `cost_model.py` | PSoC 6 estimate of cycles, RAM and flash per block |
 | `vectors.py` | Per-block reference vectors for the C port |
+| `c_model.py` | C sizes, coefficients and weights from the config and the model files |
 | `cli.py` | The `hr-estimation` command |
 
-## 6. Settings
+## 6. C port (`c/`)
+C99 implementation of `src/device` for the PSoC 6: float32, no dynamic memory, no recursion, all
+state in one caller-owned `hr_state_t` (13,836 bytes). One C file per Python module. Sizes,
+coefficients and weights are generated from `configs/device.yml` and the model files
+(`hr-estimation c-model` → `c/build/generated/hr_model.h` and `.c`; not in git, they hold the
+weights).
+
+| Python (`src/device/`) | C (`c/src/`) |
+|---|---|
+| `frontend.py` | `frontend.c` |
+| `net.py` | `net.c` |
+| `features.py` | `features.c` |
+| `scorer.py` | `scorer.c` |
+| `tracker.py` | `tracker.c` |
+| `rhythm.py` | `rhythm.c` |
+| `readout.py` | `readout.c` |
+| `estimator.py` | `estimator.c`, the API of `c/include/hr.h` |
+
+Build and test:
+
+```bash
+cd c
+make model                     # generated sizes, coefficients, weights (hr-estimation c-model)
+make                           # build/libhr_debug.* (tests), build/hr_run (host tool)
+make m4                        # Cortex-M4 objects: code size per module, stack per function
+cd .. && pytest tests/test_c_port.py
+```
+
+| Call | When | Does |
+|---|---|---|
+| `hr_init(&s, settings)` | good contact | clears all state; `NULL` settings: the defaults |
+| `hr_process_block(&s, pcm, &reading)` | every 50 ms, 200 int16 samples | 1 when a reading is due (the first when confident, then 1 per s) |
+| `hr_get_reading(&s, &reading)` | any time | latest reading; 0 before the first |
+| `hr_get_frame_info(&s, &info)` | any time | estimate (also before the first reading), gate values, rhythm, probabilities, phase (warm-up, searching, reading) |
+| `hr_set_settings(&s, &settings)`, `hr_get_settings` | any time | the three runtime settings, validated; used from the next frame |
+| `hr_reset(&s)` | contact loss | new measurement, same settings |
+| `hr_get_posterior`, `hr_model_id`, `hr_state_size` | any time | posterior over the 232 rates; model name and checksums; state size |
+
+```c
+#include "hr.h"
+
+static hr_state_t hr;                                     /* caller-owned, 13.8 KB */
+
+void on_contact(void) { hr_init(&hr, NULL); }             /* settings of configs/device.yml */
+
+void on_audio_block(const int16_t pcm[HR_BLOCK_SAMPLES])  /* every 50 ms */
+{
+    hr_reading_t r;
+    if (hr_process_block(&hr, pcm, &r))
+        show(r.bpm, r.confidence);
+}
+```
+
+Usage example (host tool on a synthetic 72 BPM signal, raw int16 PCM; real output):
+
+```
+$ c/build/hr_run hr72.raw
+model hr_v8 61a88ea2280e, state 13836 bytes, 10.0 s of input
+t 2.25 s  71.3 BPM  confidence 0.89
+...
+t 9.25 s  71.2 BPM  confidence 0.98
+```
+
+Agreement with the Python reference (`tests/test_c_port.py`):
+- 6 synthetic heartbeat cases: every block's output within float32 rounding (largest absolute
+  differences: band log energy 6.6e-4, features 3.5e-4, posterior 1.8e-5); same paths and
+  readings.
+- No heart sound (silence, hum alone): same front end, activation and activation SD, no reading
+  in either. Features of a near-flat window are rounding noise in both and are not compared.
+- All 825 test recordings: identical reading times (11,980 readings); BPM within 0.002 for 99 %
+  of the recordings and at most 0.084, where a binary feature (local ACF peak) flips on a tie.
+
+| Measure | Value | Budget |
+|---|---|---|
+| RAM: state (`hr_state_t`; 6,752 bytes of it per-frame scratch) | 13,836 bytes | |
+| RAM: stack, deepest call chain (`hr_process_block` 296 + `hr_net_step` 144 + libm) | about 470 bytes | |
+| RAM: total | about 14.3 KB | 15,360 bytes |
+| Flash: code, Cortex-M4, `-Os` | 7,239 bytes | |
+| Flash: constants (float32 coefficients and weights) | 6,188 bytes | |
+| Flash: total, without libm (`expf`, `logf`, `floorf`, `ceilf`) | 13,427 bytes | 5,120 bytes, exceeded |
+| Time per call on the host (Apple arm64, `-O2`) | 5.2 µs (ordinary block), 23.6 µs (frame block) | |
+| Cortex-M4 cycles | not measured (needs the target; cost model 3.3 M cycles/s) | 30 M cycles/s |
+
+On the target, cycles per call come from the DWT cycle counter around `hr_process_block`.
+
+## 7. Settings
 Runtime settings (`configs/device.yml`, part 1; no retraining):
 
 | Setting | Effect | Default |
@@ -243,7 +331,7 @@ median, 84.3 % within ±3 BPM; 0.65 → 3.0 s, 85.0 %; 0.7 (default) → 3.0 s, 
 constants (rate range, slow limit, regularity limit, certainty of the slow/irregular path,
 heart-sound gates) sit in part 2 (`decision`) and need re-validation when changed.
 
-## 7. Data, evaluation and results
+## 8. Data, evaluation and results
 - Data: snapshot `sq5_sweep_core500_20261008`, 2735 DUO3 recordings (17 s PCG, three ECG leads
   at 500 Hz), selected on PCG quality ≥ 0.7 and ECG-PCG agreement ≤ 5 BPM. Split by clinician
   account: 1366 train, 544 validation, 825 test. Patient-derived; never committed.
@@ -274,22 +362,28 @@ alone still gives a reading in some cases (25 synthetic 17 s inputs per type: fr
 13, white 5): a known limitation, tested as an expected failure. Unfiltered recordings:
 `hr-estimation evaluate --data <snapshot folder>` (pending a database pull).
 
-## 8. Resources
-`hr-estimation profile` (planned C code, Cortex-M4F cycles, float32, 150 MHz): 3.3 M cycles/s
-of the 30 M budget; busiest 50 ms block 3.6 ms; RAM 14,720 of 15,360 bytes; flash 4,436 of 5,120
-bytes (with a 3,000-byte code estimate). Every call runs blocks A, B and the per-sample part of C
-(0.5 ms); every fifth call adds the frame work of C, D, E, R and F. Estimates until measured on
-the target. Reference vectors for the C port (`hr-estimation vectors`, `output/vectors/`): every
+## 9. Resources
+Planning estimate, `hr-estimation profile` (Cortex-M4F cycles, float32, 150 MHz): 3.3 M cycles/s
+of the 30 M budget; busiest 50 ms block 3.6 ms; RAM 14,720 bytes; flash 4,436 bytes, assuming
+8-bit weights and 3,000 bytes of code. Every call runs blocks A, B and the per-sample part of C
+(0.5 ms); every fifth call adds the frame work of C, D, E, R and F.
+
+Measured on the C build (§6): RAM 13,836 bytes of state plus about 470 bytes of stack, within
+the 15,360-byte budget; flash 13,427 bytes without libm (7,239 bytes of code, 6,188 bytes of
+float32 constants), over the 5,120-byte budget. Cycles stay an estimate until measured on the
+target. Reference vectors for the C port (`hr-estimation vectors`, `output/vectors/`): every
 block's inputs and outputs on 8 synthetic cases (including silence and hum alone) and 3 test
 recordings.
 
-## 9. Layout and outputs
+## 10. Layout and outputs
 ```
 configs/device.yml          what the stethoscope runs: user settings, algorithm constants
 configs/training.yml        data, split, labels, augmentation, training, evaluation, targets
 src/device/                 on-device algorithm (blocks A-F and R, estimator); ports to C 1:1
 src/training/               config, data, labels, augment, train, evaluate, cost_model, vectors,
-                            cli
+                            c_model, cli
+c/                          C port: include/ (API), src/ (one file per device module), tools/,
+                            Makefile; build/ (generated model files, binaries) not in git
                             (never on the device)
 tests/                      pytest suite
 data/                       recordings (not in git)
@@ -300,7 +394,7 @@ A run folder `output/runs/<time>_<model>_<split>[_<tag>]/` holds `config.yml`,
 (pass/fail), `run_info.json` (git commit, weight checksums, cost), figures and `strata.csv`;
 stress runs add `stress_by_condition.csv`.
 
-## 10. Development history
+## 11. Development history
 `main` holds the selected candidate only. The other approaches evaluated during development
 (autocorrelation and GCC-PHAT front ends, end-to-end networks, alternative release rules and
 feature sets) are kept on branch `arvind/prototype`.

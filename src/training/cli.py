@@ -6,6 +6,7 @@
     hr-estimation evaluate [--split train|val|test] [--stress] [--tag TAG]
     hr-estimation evaluate --data SNAPSHOT_DIR        another snapshot (e.g. unfiltered)
     hr-estimation vectors                             per-block reference vectors for the C port
+    hr-estimation c-model                             C constants and weights: c/build/generated/
     hr-estimation profile [--format float32|fixed]    PSoC 6 cost model against the budget
 
 train, evaluate and profile take --weights NAME (default: config `weights`).
@@ -16,7 +17,7 @@ import json
 import logging
 from pathlib import Path
 
-from training import config, cost_model, data, evaluate, labels, train, vectors
+from training import c_model, config, cost_model, data, evaluate, labels, train, vectors
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,11 @@ def cmd_vectors(args: argparse.Namespace, cfg: dict) -> None:
     vectors.write(cfg)
 
 
+def cmd_c_model(args: argparse.Namespace, cfg: dict) -> None:
+    """Write the C model files (sizes, coefficients, weights) of the configured model."""
+    c_model.write(cfg)
+
+
 def cmd_profile(args: argparse.Namespace, cfg: dict) -> None:
     """Print the cost model per block and the totals against the budget."""
     table = cost_model.profile(cfg, args.format or "float32")
@@ -93,10 +99,12 @@ def main() -> None:
     ev.add_argument("--data", default=None, help="snapshot folder (manifest.csv, wavs/, ecg/)")
     ev.set_defaults(func=cmd_evaluate)
     sub.add_parser("vectors").set_defaults(func=cmd_vectors)
+    cm = sub.add_parser("c-model")
+    cm.set_defaults(func=cmd_c_model)
     pr = sub.add_parser("profile")
     pr.add_argument("--format", choices=["float32", "fixed"], default=None)
     pr.set_defaults(func=cmd_profile)
-    for p in (tr, ev, pr):
+    for p in (tr, ev, pr, cm):
         p.add_argument("--weights", default=None, help="model name (default: config weights)")
     args = parser.parse_args()
     cfg = config.load()
