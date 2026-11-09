@@ -83,9 +83,14 @@ def push(state: FeatureState, samples: np.ndarray) -> None:
 
 
 def lag_functions(state: FeatureState) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """ACF, NCCF and YIN over lags 0 .. n - 1 of the mean-removed window."""
+    """ACF, NCCF and YIN over lags 0 .. n - 1 of the mean-removed window; zeros for a flat
+    window. Flatness is tested on the window's own two-pass variance, which is exact for constant
+    input; the lag-sum r[0] is rounding noise there."""
     w = window(state)
     n = w.size
+    if w.var() <= VAR_FLOOR:
+        zeros = np.zeros(n, np.float32)
+        return zeros, zeros, zeros
     mu = np.float32(w.mean())
     k = np.arange(n)
     p = np.concatenate([[0], np.cumsum(w)]).astype(np.float32)
@@ -95,9 +100,6 @@ def lag_functions(state: FeatureState) -> tuple[np.ndarray, np.ndarray, np.ndarr
     r = state.sums[:n] - mu * (head + tail) + pairs * mu * mu
     e_head = q[n - k] - 2 * mu * head + pairs * mu * mu
     e_tail = q[n] - q[k] - 2 * mu * tail + pairs * mu * mu
-    if r[0] <= n * VAR_FLOOR:
-        zeros = np.zeros(n, np.float32)
-        return zeros, zeros, zeros
     acf = r / max(r[0], EPS)
     nccf = r / np.sqrt(np.maximum(e_head * e_tail, EPS))
     diff = (e_head + e_tail - 2 * r) / pairs
