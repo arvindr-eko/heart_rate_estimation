@@ -11,15 +11,14 @@ import pytest
 
 from device import estimator
 from training import data
-from tests.conftest import needs_data
+from tests.conftest import golden_file, needs_data
 
 
 def test_golden_readings(cfg):
     """Identical readings on the first 40 test recordings."""
-    if not needs_data(cfg["paths"]):
+    if not needs_data(cfg):
         pytest.skip("local data or golden readings not available")
-    golden = json.loads((cfg["paths"]["golden_dir"] / f"{cfg['weights']}_test_readings.json")
-                        .read_text())
+    golden = json.loads(golden_file(cfg).read_text())
     for row in golden[:40]:
         new, _ = estimator.run(cfg, data.load_wav(cfg, row["output_filename"]))
         assert len(new) == len(row["readings"])

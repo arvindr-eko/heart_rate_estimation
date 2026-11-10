@@ -1,4 +1,6 @@
-"""Training and evaluation code, never run on the device: recordings and splits (data), ECG
+"""Training, evaluation and tools, never run on the device: recordings and splits (data), ECG
 reference (labels), augmentation and synthetic signals (augment), training (train), evaluation
-(evaluate), the MCU cost model (cost_model), config loading (config) and the command line (cli).
+(evaluate), C model files (c_model), the C port against the Python reference and its
+self-test cases (c_port), config loading and the software version (config), and the command line
+(cli).
 """

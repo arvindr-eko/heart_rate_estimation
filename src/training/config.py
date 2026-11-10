@@ -2,6 +2,7 @@
 preflight checks."""
 
 import logging
+from importlib import metadata
 from pathlib import Path
 
 import yaml
@@ -10,13 +11,22 @@ log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_FILES = (PROJECT_ROOT / "configs" / "device.yml", PROJECT_ROOT / "configs" / "training.yml")
+PACKAGE = "heart-rate-estimation"
 
 
-def load(files: tuple = CONFIG_FILES) -> dict:
+def version() -> str:
+    """Software version (pyproject.toml, semantic versioning); 'unknown' when not installed."""
+    try:
+        return metadata.version(PACKAGE)
+    except metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def load() -> dict:
     """Load and merge the YAML configs (device settings, training settings); paths resolved
     against the project root. A section may appear in one file only."""
     cfg = {}
-    for path in files:
+    for path in CONFIG_FILES:
         with open(path) as f:
             part = yaml.safe_load(f)
         clash = set(cfg) & set(part)
@@ -41,7 +51,9 @@ def preflight(cfg: dict, need_splits: bool = True) -> None:
     checks = [("manifest", cfg["paths"]["manifest"].is_file()),
               ("wav_dir", cfg["paths"]["wav_dir"].is_dir())]
     if need_splits:
-        checks.append(("split_manifest", cfg["paths"]["split_manifest"].is_file()))
+        checks += [("split_manifest", cfg["paths"]["split_manifest"].is_file()),
+                   ("labels", cfg["paths"]["labels"].is_file()),
+                   ("ecg_dir", cfg["paths"]["ecg_dir"].is_dir())]
     for key in ("runs_dir", "models_dir", "cache_dir"):
         out = cfg["paths"][key]
         out.mkdir(parents=True, exist_ok=True)

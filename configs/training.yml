@@ -1,6 +1,5 @@
 # Training and evaluation settings (package `training`): data, labels, augmentation, training and
-# evaluation targets. Never used on the device. Stress protocol: training/evaluate.py; MCU budget
-# and cycle costs: training/cost_model.py.
+# evaluation targets, MCU budget. Never used on the device. Stress protocol: training/evaluate.py.
 # Paths are relative to the project root. Device settings: configs/device.yml.
 
 
@@ -16,7 +15,6 @@ paths:
   models_dir: output/models
   cache_dir: output/cache
   golden_dir: output/golden                # frozen readings for the regression test
-  vectors_dir: output/vectors              # per-block reference vectors for the C port
 
 data:
   reference_column: efast_ecg_heart_rate   # EFAST ECG HR; the consensus ECG HR replaces it
@@ -25,9 +23,9 @@ data:
   seed: 20261031                           # split and training
 
 split:                                     # by clinician account, balanced over heart rates
-  train: 0.5                               # share of recordings
-  val: 0.2
-  test: 0.3
+  train: 0.5                               # share of recordings: training
+  val: 0.2                                 # validation (tuning, calibration)
+  test: 0.3                                # test (once per agreed candidate)
   group_column: user_id                    # one account never in two splits
   stratify_bin_bpm: 5                      # each split gets a similar mix of 5 BPM bins
 
@@ -39,44 +37,44 @@ workers: 16                                # parallel processes for training and
 training:
   net:                                     # TCN
     periodicity_window_s: [2.0, 4.0]       # loss window drawn per batch
-    crop_s: 4.0
-    batch: 32
-    epochs: 40
-    lr: 0.003
+    crop_s: 4.0                            # length of each training example
+    batch: 32                              # examples per batch
+    epochs: 40                             # passes over the training set
+    lr: 0.003                              # Adam learning rate
   scorer:
     positive_tol_rel: 0.03                 # target: states within 3 % of the target HR
     dense_until_s: 5.0                     # training frames every 0.25 s up to here,
     sparse_step_s: 1.0                     # then one per second
-    epochs: 12
-    batch_frames: 256
-    lr: 0.003
-    weight_decay: 0.0001
+    epochs: 12                             # passes over the training frames
+    batch_frames: 256                      # frames per batch
+    lr: 0.003                              # Adam learning rate
+    weight_decay: 0.0001                   # Adam weight decay
 
 augment:                                   # training split only
   copies: 4                                # augmented copies per training recording (0: none)
-  seed: 11
-  warp_rr_cv_max: 0.10                     # time-warp only recordings with regular ECG beats
-  warp_rr_dev_max: 0.25
+  seed: 11                                 # random draws of the copies
+  warp_rr_cv_max: 0.10                     # time warp only regular ECG beats: interval CV max
+  warp_rr_dev_max: 0.25                    # and largest interval deviation from the median
   p_fast: 0.15                             # sped up (whole signal) to fast_target_bpm
-  fast_target_bpm: [200, 300]
+  fast_target_bpm: [200, 300]              # log-uniform target HR of a speed-up
   speed_max: 2.0                           # at most this speed-up factor
-  p_warp: 0.7
+  p_warp: 0.7                              # otherwise time-warped with this probability
   p_slow: 0.35                             # share of warps aimed at slow hearts
   target_bpm: [30, 220]                    # log-uniform target HR
-  slow_target_bpm: [30, 50]
+  slow_target_bpm: [30, 50]                # target HR of the slow warps
   hr_factor_range: [0.45, 1.8]             # target / original HR
   keep_s: 0.5                              # unwarped part after each R-peak (S1, systole, S2)
   keep_frac: 0.65                          # at most this share of the cycle
-  min_diastole_s: 0.08
-  p_jitter: 0.25
+  min_diastole_s: 0.08                     # shortest warped diastole
+  p_jitter: 0.25                           # share of warps with per-beat jitter
   jitter_cv: [0.03, 0.15]                  # per-beat interval variation (irregular rhythm)
-  p_noise: 0.8
+  p_noise: 0.8                             # share of copies with added noise
   noise_types: [white, hum, breath]        # friction held out for the stress test
-  snr_db: [0, 25]
-  gain_db: [-12, 12]
-  p_tilt: 0.5
-  tilt_alpha: [0.3, 1.0]
-  tilt_cutoff_hz: 150
+  snr_db: [0, 25]                          # noise level, uniform
+  gain_db: [-12, 12]                       # gain of every copy, uniform
+  p_tilt: 0.5                              # share of copies with spectral tilt
+  tilt_alpha: [0.3, 1.0]                   # share of the original signal in the tilt mix
+  tilt_cutoff_hz: 150                      # first-order low-pass of the tilt
 
 labels:                                    # ECG reference (offline; never an estimator input)
   leads: [_ECG, _ECG_1, _ECG_2]            # ECG file suffixes: leads 1-3
@@ -125,3 +123,8 @@ targets:                                   # pass/fail per bucket (agreed 2026-1
   all:
     reading_by_10s: 0.99
     half_double_readings: 0.005
+
+budget:                                    # MCU share of the algorithm (PSoC 6 CM4); measured
+  ram_bytes: 15360                         # state and stack (c/: make m4)
+  flash_bytes: 5120                        # code and constants, without libm (make m4)
+  mcycles_per_s: 30                        # average CPU, million cycles/s (self-test, target)

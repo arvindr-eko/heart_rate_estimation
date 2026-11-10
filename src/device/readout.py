@@ -21,7 +21,8 @@ mains hum):
              slow_irregular_confidence.
   forced     due at latest_s when the mass within ±conf_rough_bpm reaches forced_min_mass.
 A reading is (t_s, bpm, confidence), the confidence being the calibrated probability for the
-frame's path.
+frame's path. After the first reading, one reading per output period while a heartbeat is
+heard; with none for lost_after_s the measurement restarts (heart_absent, lost).
 """
 
 from dataclasses import dataclass
@@ -39,9 +40,11 @@ class Calibration:
 
 @dataclass
 class ReadoutState:
-    """Times of the first and the latest reading; None before the first."""
+    """Times of the first and the latest reading (None before the first); frames without a
+    heartbeat since the first reading."""
     first_at: float | None = None
     last_output: float | None = None
+    absent_frames: int = 0
 
 
 def calibration_path(cfg: dict) -> Path:
@@ -91,12 +94,42 @@ def confidence_of(a: dict) -> float:
     return a["p_fine"] if a["path"] == "regular" else a["p_rough"]
 
 
+def heart_present(cfg: dict, periodicity: float, activation_sd: float) -> bool:
+    """True while a heartbeat is heard: periodicity and activation SD at or above their gates
+    (silence, steady noise and mains hum fall below)."""
+    dc = cfg["decision"]
+    return periodicity >= dc["min_periodicity"] and activation_sd >= dc["min_activation_sd"]
+
+
+def heart_absent(cfg: dict, periodicity: float, activation_sd: float) -> bool:
+    """During a measurement: no heartbeat heard. Hysteresis against heart_present: periodicity
+    below lost_periodicity (lower than min_periodicity, so irregular rhythms, whose periodicity
+    dips, are not dropped) or activation SD below min_activation_sd."""
+    dc = cfg["decision"]
+    return periodicity < dc["lost_periodicity"] or activation_sd < dc["min_activation_sd"]
+
+
+def lost_frames(cfg: dict, frame_s: float) -> int:
+    """Frames without a heartbeat after which the measurement restarts (lost_after_s)."""
+    return int(np.ceil(cfg["decision"]["lost_after_s"] / frame_s - 1e-9))
+
+
+def lost(state: ReadoutState, cfg: dict, absent: bool, frame_s: float) -> bool:
+    """After the first reading: True once no heartbeat has been heard (heart_absent) for
+    lost_after_s, so the estimator restarts the measurement (stethoscope lifted, contact
+    lost)."""
+    if state.first_at is None:
+        return False
+    state.absent_frames = state.absent_frames + 1 if absent else 0
+    return state.absent_frames >= lost_frames(cfg, frame_s)
+
+
 def first_due(cfg: dict, a: dict, periodicity: float, activation_sd: float, hr: float,
               t: float) -> bool:
     """True when the first reading is due at time t (module docstring)."""
     rd, dc = cfg["readout"], cfg["decision"]
-    if (np.isnan(hr) or t + 1e-9 < dc["min_s"] or periodicity < dc["min_periodicity"]
-            or activation_sd < dc["min_activation_sd"]):
+    if (np.isnan(hr) or t + 1e-9 < dc["min_s"]
+            or not heart_present(cfg, periodicity, activation_sd)):
         return False
     if t + 1e-9 >= rd["latest_s"]:
         return a["rough_mass"] >= dc["forced_min_mass"]

@@ -3,7 +3,7 @@
  * form II transposed in the operation order of scipy sosfilt (a0 = 1); states start in steady
  * state for the first sample so a DC offset does not ring through. Output per band: log of the
  * mean energy over each HR_DECIMATION samples.
- * On the target, the section loop maps to CMSIS-DSP arm_biquad_cascade_df2T_f32. */
+ * The section loop computes what CMSIS-DSP arm_biquad_cascade_df2T_f32 computes. */
 #include <math.h>
 
 #include "hr.h"

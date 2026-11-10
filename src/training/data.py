@@ -79,14 +79,12 @@ def make_splits(cfg: dict) -> pd.DataFrame:
     return df
 
 
-def load_split(cfg: dict, split: str | None = None) -> pd.DataFrame:
-    """Manifest rows of one split (train, val, test); all rows when split is None."""
+def load_split(cfg: dict, split: str) -> pd.DataFrame:
+    """Manifest rows of one split (train, val, test)."""
     splits = pd.read_csv(cfg["paths"]["split_manifest"])
     df = load_manifest(cfg).merge(splits[["output_filename", "fold", "split"]],
                                   on="output_filename")
-    if split is not None:
-        df = df[df["split"] == split]
-    return df.reset_index(drop=True)
+    return df[df["split"] == split].reset_index(drop=True)
 
 
 def load_wav(cfg: dict, filename: str) -> np.ndarray:

@@ -83,6 +83,31 @@ def test_readout_rules(cfg):
     assert not due(np.full(grid.size, 1 / grid.size), 72, rd["latest_s"])
 
 
+def test_heart_presence_and_loss(cfg):
+    """Presence gates, hysteresis of absence, restart only after lost_after_s of absence and
+    only once a reading was given."""
+    dc = cfg["decision"]
+    assert readout.heart_present(cfg, dc["min_periodicity"], dc["min_activation_sd"])
+    assert not readout.heart_present(cfg, dc["min_periodicity"] - 0.01, 0.2)
+    between = (dc["lost_periodicity"] + dc["min_periodicity"]) / 2
+    assert not readout.heart_present(cfg, between, 0.2)
+    assert not readout.heart_absent(cfg, between, 0.2)          # hysteresis: still measuring
+    assert readout.heart_absent(cfg, dc["lost_periodicity"] - 0.01, 0.2)
+    assert readout.heart_absent(cfg, 0.6, dc["min_activation_sd"] - 0.001)
+    frame_s = 0.25
+    for lost_after_s, frames in ((2.0, 8), (2.1, 9), (0.25, 1)):
+        c = {**cfg, "decision": {**dc, "lost_after_s": lost_after_s}}
+        assert readout.lost_frames(c, frame_s) == frames
+    n = readout.lost_frames(cfg, frame_s)
+    state = readout.ReadoutState()
+    assert not any(readout.lost(state, cfg, True, frame_s) for _ in range(2 * n))  # no reading
+    state.first_at = 2.0
+    assert [readout.lost(state, cfg, True, frame_s) for _ in range(n - 1)] == [False] * (n - 1)
+    readout.lost(state, cfg, False, frame_s)                     # a heartbeat resets the count
+    assert not readout.lost(state, cfg, True, frame_s)
+    assert [readout.lost(state, cfg, True, frame_s) for _ in range(n - 1)][-1]
+
+
 def test_rhythm_beats():
     """Beat picking keeps one peak per period (S2 suppressed); CV and beat-count HR."""
     act = np.zeros(400)
@@ -105,13 +130,16 @@ def test_tracker_estimate(cfg):
 
 
 def test_time_warp(cfg):
-    """Warping 70 BPM by 0.6 gives 42 BPM beats and sample-continuous joins."""
+    """Warping 70 BPM by 0.6 gives 42 BPM beats; a smooth input stays smooth across the joins
+    (a misplaced join of a 7 Hz sine jumps by many times its largest step)."""
     audio, s1 = augment.synthetic_pcg(70, seed=1, interval_cv=0.0)
     beats = s1[s1 > 0.05] - 0.05
     out, new_beats = augment.time_warp(audio, 4000, beats, 0.6, 0.0, cfg,
                                        np.random.default_rng(0))
     assert abs(60 / np.diff(new_beats).mean() - 42.0) < 0.1
-    assert np.abs(np.diff(out)).max() <= np.abs(np.diff(audio)).max() + 1e-6
+    sine = np.sin(2 * np.pi * 7.0 * np.arange(audio.size) / 4000).astype(np.float32)
+    out = augment.time_warp(sine, 4000, beats, 0.6, 0.0, cfg, np.random.default_rng(0))[0]
+    assert np.abs(np.diff(out)).max() <= np.abs(np.diff(sine)).max() + 1e-6
 
 
 def test_device_never_imports_training():

@@ -4,7 +4,10 @@ Usage: state = init(cfg); then reading = process(state, block) for each block of
 PCG samples (float, full scale 1.0). Per block: band energies (A), beat activation (B) and the
 feature block's per-sample update (C). Every frame_blocks blocks: features (C), scorer (D),
 tracker (E), rhythm (R) and readout (F). A reading is (t_s, bpm, confidence), returned on output
-slots only (module readout); None otherwise. Call init again to restart after contact loss.
+slots only (module readout); None otherwise. After the first reading, readings pause while a
+frame has no heartbeat (readout.heart_absent; the reading on show stays), and after
+decision.lost_after_s without heartbeat the measurement restarts by itself (restart): readings
+stop until the next first reading. restart (or init) also starts a new measurement on request.
 """
 
 from dataclasses import dataclass, field
@@ -39,17 +42,29 @@ def frame_seconds(cfg: dict) -> float:
     return s["block_samples"] * s["frame_blocks"] / s["fs_hz"]
 
 
+def _blocks(cfg: dict, weights: dict | None = None) -> dict:
+    """Fresh state of every block (network weights reused when given)."""
+    ft = cfg["features"]
+    return {"fe": frontend.init(cfg), "nn": net.init(cfg, weights), "feat": features.init(cfg),
+            "feat_s1": features.init(cfg, ft["s1_window_s"],
+                                     cfg["frontend"]["env_rate_hz"] / ft["s1_decimation"]),
+            "trk": tracker.init(cfg, frame_seconds(cfg)), "rd": readout.ReadoutState()}
+
+
 def init(cfg: dict, keep_trace: bool = False, with_scorer: bool = True) -> EstimatorState:
     """All block states for one measurement; without the scorer when collecting its training
     inputs."""
     model = scorer.load(scorer.weights_path(cfg)) if with_scorer else None
-    return EstimatorState(
-        cfg=cfg, fe=frontend.init(cfg), nn=net.init(cfg), feat=features.init(cfg),
-        feat_s1=features.init(cfg, cfg["features"]["s1_window_s"],
-                              cfg["frontend"]["env_rate_hz"] / cfg["features"]["s1_decimation"]),
-        model=model,
-        cal=readout.load_calibration(cfg), trk=tracker.init(cfg, frame_seconds(cfg)),
-        rd=readout.ReadoutState(), grid=features.hr_grid(cfg), keep_trace=keep_trace)
+    return EstimatorState(cfg=cfg, model=model, cal=readout.load_calibration(cfg),
+                          grid=features.hr_grid(cfg), keep_trace=keep_trace, **_blocks(cfg))
+
+
+def restart(state: EstimatorState) -> None:
+    """New measurement: every block state cleared; scorer, calibration and trace kept."""
+    for name, value in _blocks(state.cfg, state.nn.weights).items():
+        setattr(state, name, value)
+    state.n_blocks = 0
+    state.s1_acc = []
 
 
 def feed(state: EstimatorState, block: np.ndarray) -> None:
@@ -121,20 +136,33 @@ def process(state: EstimatorState, block: np.ndarray) -> tuple | None:
     sd = activation_sd(state)
     cv, beat_hr = rhythm.analyse(features.window(state.feat), state.feat.rate_hz, hr, cfg["rhythm"])
     a = readout.assess(cfg, state.cal, state.trk.posterior, state.grid, hr, frame_hr, cv, acf)
+    present = readout.heart_present(cfg, acf, sd)
     if state.keep_trace:
         state.trace.append({"t": t, "hr": hr, "frame_hr": frame_hr, "periodicity": acf,
-                            "activation_sd": sd, "cv": cv, "beat_hr": beat_hr, **a})
+                            "activation_sd": sd, "cv": cv, "beat_hr": beat_hr,
+                            "heart_present": present, **a})
+    absent = readout.heart_absent(cfg, acf, sd)
+    if readout.lost(state.rd, cfg, absent, frame_seconds(cfg)):
+        restart(state)
+        return None
+    if absent and state.rd.first_at is not None:   # no update without heartbeat
+        return None
     due = readout.first_due(cfg, a, acf, sd, hr, t)
     return readout.schedule(state.rd, cfg, due, hr, readout.confidence_of(a), t)
 
 
-def run(cfg: dict, audio: np.ndarray, keep_trace: bool = False) -> tuple[list, list]:
-    """Stream a whole recording block by block; return (readings, frame trace)."""
-    state = init(cfg, keep_trace)
-    block = cfg["stream"]["block_samples"]
+def run(cfg: dict, audio: np.ndarray, keep_trace: bool = False,
+        state: EstimatorState | None = None) -> tuple[list, list]:
+    """Stream a whole recording block by block, from a new state (keep_trace) or the given one,
+    which the caller inspects afterwards; return (readings, frame trace). Reading times count
+    from the start of the recording; the trace's t counts from the start of the measurement,
+    which a restart resets (frame i ends at input time (i + 1) x frame_seconds)."""
+    if state is None:
+        state = init(cfg, keep_trace)
+    block, fs = cfg["stream"]["block_samples"], cfg["stream"]["fs_hz"]
     readings = []
-    for start in range(0, audio.size - block + 1, block):
+    for i, start in enumerate(range(0, audio.size - block + 1, block)):
         reading = process(state, audio[start:start + block])
         if reading is not None:
-            readings.append(reading)
+            readings.append(((i + 1) * block / fs, *reading[1:]))
     return readings, state.trace

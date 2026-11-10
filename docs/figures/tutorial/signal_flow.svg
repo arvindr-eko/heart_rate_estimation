@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="980"
+ viewBox="0 0 1200 980" font-family="Helvetica, Arial, sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7"
+ markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+</marker>
+<style>
+.title {font-size: 13px; font-weight: bold; fill: #0b0b0b; text-anchor: middle}
+.sub {font-size: 11px; fill: #52514e; text-anchor: middle}
+.ref {font-size: 11px; font-weight: bold; fill: #1c5cab; text-anchor: middle}
+.shape {font-size: 11px; fill: #1c5cab; font-family: Menlo, Consolas, monospace}
+.wire {fill: none; stroke: #52514e; stroke-width: 1.4}
+.band {fill: #f6f6f4; stroke: #c9c8c2; stroke-dasharray: 5 4}
+.band-label {font-size: 11px; font-weight: bold; fill: #52514e; letter-spacing: 0.5px}
+.note {font-size: 10.5px; fill: #52514e}
+.layer {font-size: 11px; fill: #0b0b0b}
+</style></defs>
+<rect width="1200" height="980" fill="#ffffff"/>
+<rect x="8" y="34" width="1184" height="344" rx="8" class="band"/>
+<text x="20" y="56" class="band-label">RUNS EVERY BLOCK: 200 new samples = 50 ms = 5 steps of 10 ms</text>
+<rect x="8" y="392" width="1184" height="422" rx="8" class="band"/>
+<text x="20" y="414" class="band-label">RUNS EVERY UPDATE: 0.25 s = 5 blocks; recomputes the heart-rate estimate</text>
+<rect x="20" y="80" width="120" height="108" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.6"/>
+<text x="80.0" y="99" class="title">PCG in</text>
+<text x="80.0" y="117" class="sub">int16, 4000 Hz</text>
+<text x="80.0" y="131" class="sub">200 samples</text>
+<text x="80.0" y="145" class="sub">every 50 ms</text>
+<text x="80.0" y="159" class="ref">§3</text>
+<rect x="210" y="80" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="295.0" y="99" class="title">A Front end</text>
+<text x="295.0" y="117" class="sub">4 band-pass filters</text>
+<text x="295.0" y="131" class="sub">5 pieces of 40 samples</text>
+<text x="295.0" y="145" class="sub">mean energy, log</text>
+<text x="295.0" y="159" class="ref">§4.1</text>
+<rect x="450" y="80" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="535.0" y="99" class="title">B1 Normalise</text>
+<text x="535.0" y="117" class="sub">5 columns, one by one:</text>
+<text x="535.0" y="131" class="sub">value − 1 s running</text>
+<text x="535.0" y="145" class="sub">mean, per band</text>
+<text x="535.0" y="159" class="ref">§4.2</text>
+<rect x="690" y="80" width="170" height="108" rx="6" fill="#fdeee6" stroke="#eb6834" stroke-width="1.6"/>
+<text x="775.0" y="99" class="title">B2 TCN</text>
+<text x="775.0" y="117" class="sub">per 10 ms: (4,) in, () out</text>
+<text x="775.0" y="131" class="sub">5 causal conv layers</text>
+<text x="775.0" y="145" class="sub">sees last 0.63 s</text>
+<text x="775.0" y="159" class="ref">§4.3</text>
+<rect x="930" y="80" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="1015.0" y="99" class="title">C Activation window</text>
+<text x="1015.0" y="117" class="sub">last 4 s of activation</text>
+<text x="1015.0" y="131" class="sub">ring (400,) + lag</text>
+<text x="1015.0" y="145" class="sub">sums (400,)</text>
+<text x="1015.0" y="159" class="ref">§4.4</text>
+<rect x="690" y="250" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="775.0" y="269" class="title">C′ S1-band window</text>
+<text x="775.0" y="287" class="sub">25-50 Hz band, pairs</text>
+<text x="775.0" y="301" class="sub">averaged → 50 Hz; last</text>
+<text x="775.0" y="315" class="sub">2 s: (100,) + sums</text>
+<text x="775.0" y="329" class="ref">§4.5</text>
+<polyline points="140,126 208,126" class="wire" marker-end="url(#arrow)"/>
+<text x="174" y="104" class="shape" text-anchor="middle">(200,)</text>
+<text x="174" y="117" class="shape" text-anchor="middle">per block</text>
+<polyline points="380,126 448,126" class="wire" marker-end="url(#arrow)"/>
+<text x="414" y="104" class="shape" text-anchor="middle">(4, 5)</text>
+<text x="414" y="117" class="shape" text-anchor="middle">per block</text>
+<polyline points="620,126 688,126" class="wire" marker-end="url(#arrow)"/>
+<text x="654" y="104" class="shape" text-anchor="middle">(4,) x 5</text>
+<text x="654" y="117" class="shape" text-anchor="middle">per block</text>
+<circle cx="655" cy="126" r="3.5" fill="#52514e"/>
+<polyline points="655,126 655,304 688,304" class="wire" marker-end="url(#arrow)"/>
+<text x="647" y="286" class="shape" text-anchor="end">band 0:</text>
+<text x="647" y="299" class="shape" text-anchor="end">() x 5 per block</text>
+<polyline points="860,126 928,126" class="wire" marker-end="url(#arrow)"/>
+<text x="894" y="104" class="shape" text-anchor="middle">() x 5</text>
+<text x="894" y="117" class="shape" text-anchor="middle">per block</text>
+<polyline points="1100,126 1118,126" class="wire"/>
+<polygon points="1120,113 1176,113 1186,126.0 1176,139 1120,139" fill="#ffffff" stroke="#52514e" stroke-width="1.2"/><text x="1153.0" y="130" class="shape" text-anchor="middle">act</text>
+<polyline points="775,358 775,436 70,436 70,490" class="wire" marker-end="url(#arrow)"/>
+<text x="420" y="430" class="shape" text-anchor="middle">S1-band window (n1,)</text>
+<polyline points="1015,188 1015,452 130,452 130,490" class="wire" marker-end="url(#arrow)"/>
+<text x="560" y="472" class="shape" text-anchor="middle">activation window (n,), lag sums (n,)</text>
+<rect x="20" y="492" width="180" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="110.0" y="511" class="title">C Features</text>
+<text x="110.0" y="529" class="sub">from the last 4 s: ACF,</text>
+<text x="110.0" y="543" class="sub">NCCF, YIN read at each</text>
+<text x="110.0" y="557" class="sub">rate's T, T/2, 2T, 3T</text>
+<text x="110.0" y="571" class="ref">§4.6</text>
+<rect x="290" y="492" width="170" height="108" rx="6" fill="#fdeee6" stroke="#eb6834" stroke-width="1.6"/>
+<text x="375.0" y="511" class="title">D Scorer</text>
+<text x="375.0" y="529" class="sub">same MLP on each row</text>
+<text x="375.0" y="543" class="sub">17 → 16 → 1</text>
+<text x="375.0" y="557" class="sub">log-softmax over rows</text>
+<text x="375.0" y="571" class="ref">§4.7</text>
+<rect x="550" y="492" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="635.0" y="511" class="title">E HMM tracker</text>
+<text x="635.0" y="529" class="sub">predict: drift, ×2, ×½</text>
+<text x="635.0" y="543" class="sub">update: × evidence</text>
+<text x="635.0" y="557" class="sub">estimate: best ±5 %</text>
+<text x="635.0" y="571" class="ref">§4.8</text>
+<rect x="880" y="492" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="965.0" y="511" class="title">F Readout</text>
+<text x="965.0" y="529" class="sub">gates: time, ACF, SD</text>
+<text x="965.0" y="543" class="sub">path: regular / slow</text>
+<text x="965.0" y="557" class="sub">p ≥ threshold → due</text>
+<text x="965.0" y="571" class="ref">§4.10</text>
+<rect x="1100" y="492" width="90" height="108" rx="6" fill="#ffffff" stroke="#52514e" stroke-width="1.6"/>
+<text x="1145.0" y="511" class="title">Reading</text>
+<text x="1145.0" y="529" class="sub">t_s, bpm,</text>
+<text x="1145.0" y="543" class="sub">confidence</text>
+<text x="1145.0" y="557" class="sub"></text>
+<text x="1145.0" y="571" class="ref">§4.10</text>
+<polyline points="200,538 288,538" class="wire" marker-end="url(#arrow)"/>
+<text x="244" y="529" class="shape" text-anchor="middle">(232, 17)</text>
+<polyline points="460,538 548,538" class="wire" marker-end="url(#arrow)"/>
+<text x="504" y="516" class="shape" text-anchor="middle">evidence</text>
+<text x="504" y="529" class="shape" text-anchor="middle">(232,)</text>
+<polyline points="720,538 878,538" class="wire" marker-end="url(#arrow)"/>
+<text x="780" y="516" class="shape" text-anchor="middle">posterior (232,)</text>
+<text x="780" y="529" class="shape" text-anchor="middle">HR ()</text>
+<polyline points="1050,538 1098,538" class="wire" marker-end="url(#arrow)"/>
+<circle cx="840" cy="538" r="3.5" fill="#52514e"/>
+<rect x="640" y="672" width="170" height="92" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
+<text x="725.0" y="691" class="title">R Rhythm</text>
+<text x="725.0" y="709" class="sub">peaks of the window</text>
+<text x="725.0" y="723" class="sub">→ beats → interval CV</text>
+<text x="725.0" y="737" class="ref">§4.9</text>
+<polyline points="840,538 840,702 812,702" class="wire" marker-end="url(#arrow)"/>
+<text x="848" y="662" class="shape" text-anchor="start">HR ()</text>
+<polygon points="530,705 586,705 586,731 530,731 520,718.0" fill="#ffffff" stroke="#52514e" stroke-width="1.2"/><text x="553.0" y="722" class="shape" text-anchor="middle">act</text>
+<polyline points="586,718 638,718" class="wire" marker-end="url(#arrow)"/>
+<polyline points="810,742 965,742 965,602" class="wire" marker-end="url(#arrow)"/>
+<text x="972" y="682" class="shape" text-anchor="start">CV ()</text>
+<text x="20" y="838" class="band-label">LEGEND</text>
+<rect x="20" y="848" width="28" height="16" rx="3" fill="#fdeee6" stroke="#eb6834" stroke-width="1.4"/>
+<text x="60" y="860" class="note">Trained block: weights learned from recordings (TCN 913, scorer 339)</text>
+<rect x="610" y="848" width="28" height="16" rx="3" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.4"/>
+<text x="650" y="860" class="note">Fixed block: formula, settings from configs/device.yml</text>
+<rect x="20" y="872" width="28" height="16" rx="3" fill="#ffffff" stroke="#52514e" stroke-width="1.4"/>
+<text x="60" y="884" class="note">Input or output of the algorithm</text>
+<line x1="610" y1="880" x2="638" y2="880" class="wire"/><circle cx="624" cy="880" r="3.5" fill="#52514e"/>
+<text x="650" y="884" class="note">Wire splits: the same data goes to two blocks</text>
+<polygon points="16,892 42,892 52,905.0 42,918 16,918" fill="#ffffff" stroke="#52514e" stroke-width="1.2"/><text x="34.0" y="909" class="shape" text-anchor="middle">act</text>
+<text x="60" y="908" class="note">Tag: the wire continues at the tag with the same name</text>
+<text x="650" y="908" class="note">Blue text on a wire: shape of the data. (n,) n values; (r, c) matrix; () one number</text>
+<text x="60" y="932" class="note">n: activation values in the window (up to 400); n1: S1-band values (up to 100)</text>
+<text x="650" y="932" class="note">§: tutorial section with the details of the block</text>
+<text x="60" y="956" class="note">x 5 per block: 5 values per block, one per 10 ms step, sent one after another</text>
+</svg>

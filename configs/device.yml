@@ -10,7 +10,8 @@ readout:                       # when the first reading appears; changing these 
   confidence: 0.7              # regular hearts: how sure before the first reading (probability of
                                # being within ±3 BPM, measured on validation); lower: sooner
   slow_irregular_after_s: 4.0  # slow or irregular hearts: first reading not before this time
-  latest_s: 8.0                # heart sound present: a first reading by this time at the latest
+  latest_s: 8.0                # heart sound present: a first reading at this time when the
+                               # estimate is roughly certain (decision.forced_min_mass)
 
 
 # ── 2. ALGORITHM (fixed by the trained model) ────────────────────────────────────────────────────
@@ -18,20 +19,20 @@ readout:                       # when the first reading appears; changing these 
 weights: hr_v8                             # output/models/hr_v8_*.npz: TCN, scorer, calibration
 
 stream:
-  fs_hz: 4000
+  fs_hz: 4000                              # PCG sample rate
   block_samples: 200                       # 50 ms per input block
   frame_blocks: 5                          # tracker update every 5 blocks = 0.25 s
   output_period_s: 1.0                     # one reading per second after the first
 
 frontend:                                  # block A
-  bands_hz: [[25, 50], [50, 100], [100, 200], [200, 400]]
+  bands_hz: [[25, 50], [50, 100], [100, 200], [200, 400]]  # band-pass edges
   filter_order: 2                          # Butterworth order per band edge
   env_rate_hz: 100                         # log energy every 10 ms
 
 net:                                       # block B, causal TCN
   norm_tau_s: 1.0                          # running-mean time constant of the input
-  channels: 8
-  kernel: 3
+  channels: 8                              # channels of every layer
+  kernel: 3                                # taps per causal convolution
   dilations: [1, 2, 4, 8, 16]              # receptive field 63 frames = 0.63 s
 
 features:                                  # block C
@@ -43,13 +44,13 @@ features:                                  # block C
   s1_max_bpm: 250                          # band features used for candidate rates up to this
 
 grid:                                      # candidate heart rates: 232 states, 1 % apart
-  hr_min_bpm: 30
-  hr_max_bpm: 300
-  step_rel: 0.01
+  hr_min_bpm: 30                           # lowest candidate rate
+  hr_max_bpm: 300                          # upper bound (highest state 298.8 BPM)
+  step_rel: 0.01                           # relative spacing of the states
 
 scorer:                                    # block D
   emission_beta: 0.35                      # weight of the scorer in the tracker
-  hidden: 16
+  hidden: 16                               # hidden units of the scorer MLP
 
 tracker:                                   # block E
   sigma_rel_per_sqrt_s: 0.08               # HR drift, relative, per sqrt(second)
@@ -72,3 +73,8 @@ decision:                                  # block F, internal (re-validate when
   forced_min_mass: 0.3                     # forced reading at latest_s only above this mass
   min_periodicity: 0.2                     # no reading below this ACF at the estimate's period
   min_activation_sd: 0.03                  # no reading below this activation SD (silence, hum)
+  lost_periodicity: 0.15                   # after the first reading, a frame without heartbeat:
+                                           # ACF below this (lower than min_periodicity, so
+                                           # irregular rhythms stay) or SD below min_activation_sd
+  lost_after_s: 2.0                        # this long without heartbeat in a row: the
+                                           # measurement restarts by itself

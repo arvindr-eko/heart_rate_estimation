@@ -70,6 +70,8 @@ typedef struct {
     uint32_t last_block;            /* block of the latest reading */
     hr_reading_t last;
     hr_frame_info_t info;
+    uint16_t absent_frames;         /* frames in a row without a heartbeat (after the first
+                                       reading) */
     uint8_t s1_n;
     uint8_t has_reading;
     hr_scratch_t scratch;
@@ -96,7 +98,6 @@ float hr_net_step(hr_net_t *nn, const float x[HR_NET_IN]);
 /* C: push one sample (ring buffer, lag sums); lag functions of the window; features. */
 void hr_window_push(float *hist, float *sums, uint16_t cap, uint32_t *count, float x);
 uint16_t hr_window_size(uint16_t cap, uint32_t count);
-float hr_window_at(const float *hist, uint16_t cap, uint32_t count, uint16_t i);
 uint16_t hr_lag_functions(const float *hist, const float *sums, uint16_t cap, uint32_t count,
                           float *acf, float *nccf, uint16_t n_nccf, float *yin, uint16_t n_yin);
 uint16_t hr_acf_peaks(const float *acf, uint16_t n, float *peaks);
@@ -118,9 +119,11 @@ float hr_tracker_estimate(const float posterior[HR_N_STATES]);
 void hr_rhythm_analyse(const hr_window_t *act, float hr, uint16_t *maxima, uint16_t *beats,
                        float *cv, float *beat_bpm);
 
-/* F: posterior mass near hr, calibrated probability, path, first-reading rule. */
+/* F: posterior mass near hr, calibrated probability, path, first-reading rule, loss rule. */
 float hr_mass_within(const float posterior[HR_N_STATES], float hr, float half_width_bpm);
 float hr_probability(const float weights[3], float mass, float periodicity);
 int hr_first_due(const hr_state_t *s, const hr_frame_info_t *f, float rough_mass, int agree);
+int hr_heart_absent(const hr_frame_info_t *f);
+int hr_lost(hr_state_t *s, int absent);
 
 #endif

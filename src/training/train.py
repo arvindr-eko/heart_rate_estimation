@@ -69,8 +69,7 @@ def _net_example(cfg: dict, task: tuple) -> tuple:
 def net_dataset(cfg: dict, rows: pd.DataFrame) -> dict:
     """Zero-padded TCN inputs, reference HR, valid length and NaN-padded beat times per
     training row."""
-    names, xs, refs, beats = zip(*data.map_records(cfg, _net_example, _tasks(rows),
-                                                   "TCN inputs"))
+    _, xs, refs, beats = zip(*data.map_records(cfg, _net_example, _tasks(rows), "TCN inputs"))
     lengths = np.array([x.shape[1] for x in xs])
     x_all = np.zeros((len(xs), xs[0].shape[0], lengths.max()), dtype=np.float32)
     for j, x in enumerate(xs):
@@ -79,8 +78,8 @@ def net_dataset(cfg: dict, rows: pd.DataFrame) -> dict:
     for j, b in enumerate(beats):
         if b is not None:
             beat_all[j, :len(b)] = b
-    return {"x": x_all, "names": np.array(names), "ref": np.array(refs, dtype=np.float32),
-            "lengths": lengths, "beats": beat_all}
+    return {"x": x_all, "ref": np.array(refs, dtype=np.float32), "lengths": lengths,
+            "beats": beat_all}
 
 
 def crop_targets(cfg: dict, dataset: dict, idx: np.ndarray, end_frames: np.ndarray,
@@ -365,15 +364,17 @@ def scorer_inputs(cfg: dict, rows: pd.DataFrame) -> dict:
 def _frame_rows(cfg: dict, task: tuple) -> np.ndarray:
     """Per frame from min_s on, with heartbeat periodicity: path (1 = regular), fine and rough
     posterior masses, periodicity, and the absolute error against the ECG over the same
-    seconds."""
+    seconds (frame i ends at input time (i + 1) x frame length; the trace's t restarts with
+    each measurement)."""
     filename, beats = task
     lc, dc = cfg["labels"], cfg["decision"]
     _, trace = estimator.run(cfg, data.load_wav(cfg, filename), keep_trace=True)
+    frame_s = estimator.frame_seconds(cfg)
     rows = []
-    for f in trace:
+    for i, f in enumerate(trace):
         if f["t"] + 1e-9 < dc["min_s"] or f["periodicity"] < dc["min_periodicity"]:
             continue
-        ref = labels.window_hr(beats, f["t"], lc["window_s"], lc["min_intervals"])
+        ref = labels.window_hr(beats, (i + 1) * frame_s, lc["window_s"], lc["min_intervals"])
         rows.append((f["path"] == "regular", f["fine_mass"], f["rough_mass"], f["periodicity"],
                      abs(f["hr"] - ref)))
     return np.array(rows, dtype=float).reshape(-1, 5)

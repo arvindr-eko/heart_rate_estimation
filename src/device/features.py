@@ -28,7 +28,8 @@ S1_FEATURES = ["acf_T", "acf_half_T", "acf_2T"]   # of the 25-50 Hz band, where 
 ACF_T = FEATURE_NAMES.index("acf_T")
 PEAK_OFFSET_MAX = 0.1   # relative lag offset beyond which no nearby ACF peak is assumed
 EPS = 1e-12
-VAR_FLOOR = 1e-6        # window variance below this: no periodicity (flat input, e.g. silence)
+VAR_FLOOR = 1e-4        # window variance below this (SD 0.01): no periodicity. Flat or near-flat
+                        # input (silence); the mean removal from the lag sums cancels there
 
 
 @dataclass
@@ -149,6 +150,8 @@ def compute(state: FeatureState) -> np.ndarray | None:
     nccf_2t = at_lags(nccf, 2 * lags, n - 1)
     nccf_2t[2 * lags > n - min_overlap] = np.nan
     acf_t = np.nan_to_num(acf_at[1.0])
+    # local peak against the states two steps away; circular, so the first and last states of
+    # the grid compare with the other end (the trained scorer uses this definition)
     peak = (acf_t >= np.roll(acf_t, 2)) & (acf_t >= np.roll(acf_t, -2))
     cols = {"acf_T": acf_at[1.0], "acf_half_T": acf_at[0.5],
             "acf_2T": np.nan_to_num(acf_at[2.0]), "valid_2T": ~np.isnan(acf_at[2.0]),

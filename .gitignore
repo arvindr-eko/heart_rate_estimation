@@ -7,3 +7,4 @@ __pycache__/
 
 # C port build outputs (generated model files hold the weights)
 c/build/
+.venv/

@@ -11,6 +11,7 @@ least min_leads leads match the recording's beats (F1 >= lead_f1_min) and its be
 plausible.
 """
 
+import hashlib
 import json
 import logging
 import warnings
@@ -129,9 +130,17 @@ def _record(cfg: dict, task: tuple) -> tuple:
     return output_filename, consensus(leads, fs, cfg["labels"])
 
 
+def _cache_path(cfg: dict) -> Path:
+    """Consensus cache of the current settings (labels section, max_duration_s)."""
+    key = json.dumps([cfg["labels"], cfg["data"]["max_duration_s"]], sort_keys=True)
+    digest = hashlib.sha256(key.encode()).hexdigest()[:12]
+    return cfg["paths"]["cache_dir"] / f"ecg_consensus_{digest}.json"
+
+
 def build_beats(cfg: dict, df: pd.DataFrame) -> dict:
-    """Consensus result {beats, leads_ok, trusted} per recording in df, cached as JSON."""
-    cache = cfg["paths"]["cache_dir"] / "ecg_consensus.json"
+    """Consensus result {beats, leads_ok, trusted} per recording in df, cached as JSON per
+    settings."""
+    cache = _cache_path(cfg)
     known = json.loads(cache.read_text()) if cache.is_file() else {}
     todo = [(f, k) for f, k in zip(df["output_filename"], df["s3_key"]) if f not in known]
     if todo:

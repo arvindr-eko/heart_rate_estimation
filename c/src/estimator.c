@@ -1,7 +1,9 @@
 /* Streaming estimator (src/device/estimator.py): blocks A-F and R behind one call per input
  * block, and the public API of hr.h. Per block: band energies (A), activation (B) and the
  * windows' per-sample updates (C). Every HR_FRAME_BLOCKS blocks: lag functions and features
- * (C), scores (D), tracker (E), gates, rhythm (R) and readout (F). */
+ * (C), scores (D), tracker (E), gates, rhythm (R) and readout (F). After the first reading,
+ * readings pause in frames without heartbeat, and the measurement restarts when the heartbeat
+ * is lost (hr_lost). */
 #include <math.h>
 
 #include "hr.h"
@@ -29,6 +31,7 @@ static void clear(hr_state_t *s)
     s->s1_n = 0;
     hr_tracker_init(s->posterior);
     s->n_blocks = s->first_block = s->last_block = 0;
+    s->absent_frames = 0;
     s->has_reading = 0;
     s->info.t_s = 0.0f;
     s->info.estimate_bpm = s->info.frame_bpm = NAN;
@@ -36,6 +39,7 @@ static void clear(hr_state_t *s)
     s->info.periodicity = s->info.activation_sd = s->info.p_fine = s->info.p_rough = 0.0f;
     s->info.path = HR_PATH_REGULAR;
     s->info.phase = HR_PHASE_WARMUP;
+    s->info.heart_present = 0;
 #ifdef HR_DEBUG
     s->dbg_has_features = 0;
 #endif
@@ -177,7 +181,8 @@ static int frame_evidence(hr_state_t *s, float *frame_bpm)
     return 1;
 }
 
-/* Frame work: tracker, gates, rhythm, readout; 1 when a reading is due. */
+/* Frame work: tracker, gates, rhythm, readout; 1 when a reading is due. On loss, the state is
+ * cleared and the frame info kept with phase HR_PHASE_WARMUP. */
 static int frame(hr_state_t *s, hr_reading_t *out)
 {
     hr_scratch_t *sc = &s->scratch;
@@ -205,6 +210,16 @@ static int frame(hr_state_t *s, hr_reading_t *out)
     f->p_fine = hr_probability(hr_cal_fine, fine, f->periodicity);
     f->p_rough = hr_probability(hr_cal_rough, rough, f->periodicity);
     const int agree = !isnan(frame_bpm) && fabsf(logf(hr / frame_bpm)) <= HR_EST_TOL_LOG;
+    f->heart_present = (uint8_t)(f->periodicity >= HR_MIN_PERIODICITY
+                                 && f->activation_sd >= HR_MIN_ACTIVATION_SD);
+    const int absent = hr_heart_absent(f);
+    if (s->has_reading && hr_lost(s, absent)) {
+        const hr_frame_info_t ended = *f;
+        clear(s);
+        s->info = ended;
+        s->info.phase = HR_PHASE_WARMUP;
+        return 0;
+    }
     f->phase = have ? HR_PHASE_SEARCHING : HR_PHASE_WARMUP;
     int emit;
     if (!s->has_reading) {
@@ -214,7 +229,7 @@ static int frame(hr_state_t *s, hr_reading_t *out)
             s->first_block = s->n_blocks;
         }
     } else {
-        emit = s->n_blocks >= s->last_block + HR_OUTPUT_BLOCKS;
+        emit = !absent && s->n_blocks >= s->last_block + HR_OUTPUT_BLOCKS;
     }
     if (s->has_reading)
         f->phase = HR_PHASE_READING;
@@ -287,6 +302,12 @@ void hr_get_frame_info(const hr_state_t *s, hr_frame_info_t *info)
 const float *hr_get_posterior(const hr_state_t *s)
 {
     return s->posterior;
+}
+
+/* Software version. */
+const char *hr_version(void)
+{
+    return HR_VERSION;
 }
 
 /* Model name and weight checksums. */

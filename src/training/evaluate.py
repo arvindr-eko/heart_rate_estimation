@@ -31,8 +31,8 @@ import yaml
 from matplotlib.figure import Figure
 
 from training import config
-from device import estimator, net, scorer
-from training import augment, cost_model, data, labels
+from device import estimator, net, readout, scorer
+from training import augment, data, labels
 
 log = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ def run_records(cfg: dict, df: pd.DataFrame, cases: list | None = None) -> pd.Da
     return rec
 
 
-def group_of(cfg: dict, row, own_beats: bool) -> str:
+def group_of(row, own_beats: bool) -> str:
     """Grading group of one recording (module docstring)."""
     if own_beats:
         return "graded"
@@ -187,7 +187,7 @@ def grade(cfg: dict, rec: pd.DataFrame, beats: dict) -> tuple[pd.DataFrame, pd.D
     for i, r in enumerate(rec.itertuples(index=False)):
         own = r.beats is not None
         b = np.asarray(r.beats) if own else beats[r.output_filename]["beats"]
-        group = group_of(cfg, r, own)
+        group = group_of(r, own)
         ref_hr = labels.full_hr(b) if own else r.reference_bpm
         af = r.rhythm == cfg["eval"]["af_rhythm"]
         cv = interval_cv(b)
@@ -297,17 +297,22 @@ def stress_table(cfg: dict, per_rec: pd.DataFrame, per_read: pd.DataFrame) -> pd
     return pd.DataFrame(rows)
 
 
+
 # Output
 
 def provenance(cfg: dict) -> dict:
-    """Git commit (with an uncommitted-changes flag) and weight checksums of a run."""
+    """Software version, checksum of requirements.txt, git commit (with an
+    uncommitted-changes flag) and checksums of the model files (network, scorer, calibration)."""
     def git(*args: str) -> str:
         """Output of a git command in the project root ('' outside a repository)."""
         return subprocess.run(["git", *args], cwd=config.PROJECT_ROOT, capture_output=True,
                               text=True).stdout.strip()
 
-    files = (net.weights_path(cfg), scorer.weights_path(cfg))
-    return {"git_commit": git("rev-parse", "--short", "HEAD"),
+    files = (net.weights_path(cfg), scorer.weights_path(cfg), readout.calibration_path(cfg))
+    reqs = config.PROJECT_ROOT / "requirements.txt"
+    return {"version": config.version(),
+            "requirements_sha256": hashlib.sha256(reqs.read_bytes()).hexdigest()[:12],
+            "git_commit": git("rev-parse", "--short", "HEAD"),
             "git_uncommitted_changes": bool(git("status", "--porcelain", "--untracked-files=no")),
             "weights_sha1": {p.name: hashlib.sha1(p.read_bytes()).hexdigest()[:12]
                              for p in files}}
@@ -330,8 +335,7 @@ def write_run(cfg: dict, rec: pd.DataFrame, per_rec: pd.DataFrame, summary: dict
     info = {"run_id": run_id, "weights": cfg["weights"], "split": split, "tag": tag,
             "n_records": len(rec), "manifest": str(cfg["paths"]["manifest"]),
             "split_manifest": str(cfg["paths"]["split_manifest"]),
-            "labels": str(cfg["paths"]["labels"]), **provenance(cfg),
-            "resources": cost_model.totals(cost_model.profile(cfg), cfg)}
+            "labels": str(cfg["paths"]["labels"]), **provenance(cfg)}
     (out / "run_info.json").write_text(json.dumps(info, indent=1, default=float))
     return out
 

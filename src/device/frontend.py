@@ -4,8 +4,8 @@ Input: one block of block_samples PCG samples (200 at 4000 Hz = 50 ms), float32,
 Output: log mean energy per band per 10 ms, (4 bands, 5 values) per block (env_rate_hz 100).
 Bands 25-50, 50-100, 100-200, 200-400 Hz, Butterworth of order 2 per edge (2 biquads each).
 State: 2 values per biquad, started in steady state for the first sample so a DC offset does not
-ring through. C: CMSIS-DSP arm_biquad_cascade_df2T_f32 (the direct form II transposed structure
-of scipy sosfilt); coefficients generated from configs/device.yml.
+ring through. C (c/src/frontend.c): the same direct form II transposed biquads as scipy
+sosfilt; coefficients generated from configs/device.yml.
 """
 
 from dataclasses import dataclass

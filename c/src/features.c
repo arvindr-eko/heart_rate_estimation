@@ -21,13 +21,6 @@ uint16_t hr_window_size(uint16_t cap, uint32_t count)
     return count < cap ? (uint16_t)count : cap;
 }
 
-/* Sample i of the window, oldest first. */
-float hr_window_at(const float *hist, uint16_t cap, uint32_t count, uint16_t i)
-{
-    const uint16_t n = hr_window_size(cap, count);
-    return hist[(count - n + i) % cap];
-}
-
 /* Add one sample: remove the oldest sample's lag pairs when full, add the new ones. */
 void hr_window_push(float *hist, float *sums, uint16_t cap, uint32_t *count, float x)
 {
@@ -205,6 +198,7 @@ void hr_state_features(const hr_scratch_t *sc, uint16_t n, uint16_t n_peaks, uin
     in[3] = (float)valid_2t;
     in[4] = lag <= overlap_limit ? hr_lag_interp(sc->u.lag.nccf, n, lag, &valid) : 0.0f;
     in[5] = hr_lag_interp(sc->u.lag.yin, n, lag, &valid);
+    /* local ACF peak against the states two steps away, circular as in the reference */
     in[6] = (acf_t >= sc->acf_t[(state + HR_N_STATES - 2) % HR_N_STATES]
              && acf_t >= sc->acf_t[(state + 2) % HR_N_STATES]) ? 1.0f : 0.0f;
     in[7] = acf_t - acf_t_max;

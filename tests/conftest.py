@@ -11,6 +11,12 @@ def cfg():
     return config.load()
 
 
-def needs_data(cfg_paths: dict) -> bool:
-    """True when the recordings, labels and golden readings are available locally."""
-    return all(cfg_paths[k].exists() for k in ("wav_dir", "split_manifest", "golden_dir"))
+def golden_file(cfg: dict):
+    """Frozen test readings of the configured model."""
+    return cfg["paths"]["golden_dir"] / f"{cfg['weights']}_test_readings.json"
+
+
+def needs_data(cfg: dict) -> bool:
+    """True when the recordings, the split and the golden readings are available locally."""
+    return (cfg["paths"]["wav_dir"].is_dir() and cfg["paths"]["split_manifest"].is_file()
+            and golden_file(cfg).is_file())
