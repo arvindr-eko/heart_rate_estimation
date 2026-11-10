@@ -11,7 +11,7 @@ algorithm; the C port (`c/`) is verified against it.
 <!-- begin:version -->
 | Version | Model | Generated | Commit | Runs |
 |---|---|---|---|---|
-| 1.0.0 | hr_v8 | 2026-11-09 | 77e69ad | val `20261109_170159_hr_v8_val_v1.0.0`, test `20261109_170212_hr_v8_test_v1.0.0`, stress `20261109_171914_hr_v8_test_v1.0.0_stress` |
+| 1.1.0 | hr_v8 | 2026-11-10 | 15fc04b | val `20261110_150811_hr_v8_val_v1.1.0`, test `20261110_150919_hr_v8_test_v1.1.0`, stress `20261110_151009_hr_v8_test_v1.1.0_stress` |
 
 Key results, test split (703 recordings with a trusted ECG reference); all results in
 [docs/results.md](docs/results.md):
@@ -26,7 +26,7 @@ Key results, test split (703 recordings with a trusted ECG reference); all resul
 | all: half/double readings; with a reading by 10 s | 0.2 %; 99.9 % |
 | targets met (test and stress) | 9 of 14 |
 | C port: test recordings with the Python reading times | 825 of 825 |
-| C port, Cortex-M4: RAM of the state; flash of code and constants without libm | 13,836 bytes (budget 15,360, within); 13,705 bytes (budget 5,120, exceeded) |
+| C port, Cortex-M4: RAM of the state; stack, libm included; flash of code and constants without libm | 9,940 bytes (budget 10,240, within); 504 bytes (budget 1,024, within); 14,453 bytes (budget 5,120, exceeded) |
 <!-- end:version -->
 
 ## Documents
@@ -56,7 +56,8 @@ Key results, test split (703 recordings with a trusted ECG reference); all resul
   give no new reading, and 2 s of them (stethoscope lifted) end the measurement, which then
   restarts by itself: the firmware needs no contact detection.
 - Trained parts: a causal network (913 weights) and a per-rate scorer (339 parameters); the rest
-  is fixed signal processing. float32, fixed-size state, no look-ahead.
+  is fixed signal processing. float32 (the per-frame ACF and NCCF as int16 codes), fixed-size
+  state of 9.9 KB, no look-ahead.
 - Reference: the ECG of the same recording (R-peak consensus of five detectors on three leads),
   never an algorithm input.
 - Known limitations of this version: the regular group's first reading misses its ±3 BPM target
@@ -100,13 +101,13 @@ pytest                                           # unit, streaming, corner, gold
 
 ## 3. Usage example
 ```
-$ hr-estimation evaluate --split test --tag v1.0.0
-15:47:01 FAIL regular_common.first_within_fine: value 0.877, target 0.92
-15:47:01 targets passed 9/12 -> 20261109_154701_hr_v8_test_v1.0.0
+$ hr-estimation evaluate --split test --tag v1.1.0
+15:09:20 FAIL regular_common.first_within_fine: value 0.877, target 0.92
+15:09:20 targets passed 9/12 -> 20261110_150919_hr_v8_test_v1.1.0
 
 $ cd c && make selftest
-hr_selftest: version 1.0.0, model hr_v8 61a88ea2280e, state 13836 bytes
-  hr72        8 readings  PASS
+hr_selftest: version 1.1.0, model hr_v8 61a88ea2280e, state 9940 bytes
+  hr72_lift_off  19 readings  PASS
 hr_selftest: PASS
 ```
 

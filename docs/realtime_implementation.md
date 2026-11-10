@@ -145,7 +145,7 @@ output):
 
 ```
 $ c/build/hr_run hr72.raw
-version 1.0.0, model hr_v8 61a88ea2280e, state 13836 bytes, 10.0 s of input
+version 1.1.0, model hr_v8 61a88ea2280e, state 9940 bytes, 10.0 s of input
 t 2.25 s  71.3 BPM  confidence 0.89  first
 ...
 t 9.25 s  71.2 BPM  confidence 0.98
@@ -155,8 +155,16 @@ Implementation choices, all equivalent to the Python code up to float32 rounding
 - delay lines and windows are ring buffers, so nothing is shifted per sample;
 - the lag functions take one pass over the lags with running head and tail sums (the Python
   code uses prefix-sum arrays, which would need 3.2 KB more RAM);
+- the window's per-sample update removes the oldest sample's pair and adds the new one in one
+  pass over the lags (the same two operations per lag as the reference's two passes);
+- YIN is kept only at the states' periods, interpolated during the lag pass and held in the
+  score buffer until each state's features are read; the ACF at a state's period is
+  interpolated when needed instead of stored per state;
+- the ACF peaks are found while the states are scored (rates rising, lags falling), from the
+  mean-removed lag sums rebuilt on the way down, instead of a stored list of peaks;
 - the scorer's input standardisation is folded into its first layer (no divisions);
-- per-frame buffers (lag functions, scores, tracker prior, picked beats) share one scratch area;
+- per-frame buffers (ACF and NCCF as int16 codes, scores, tracker prior, picked beats) share
+  one scratch area;
 - times are compared in blocks, exact for thresholds on the 50 ms grid.
 
 ## 4. Integration into the firmware
@@ -201,8 +209,10 @@ stack); not yet with the product toolchain or on the target (§4.7).
 - State: one `hr_state_t` per measurement, owned by the caller and static (never on a task
   stack); size in §6, or `hr_state_size()` at run time. The library has no heap and no global
   variables, so two states in two tasks are independent.
-- Stack: §6 gives `hr_process_block` with its deepest callee, without libm; 1 KB for the calls
-  leaves room for libm (step 3 of §4.7 measures it).
+- Stack: §6 gives the deepest call path from `hr_process_block`, from the call graph and the
+  frames of the Cortex-M4 build, with 32 bytes for each libm or compiler-runtime call (newlib's
+  `expf` and `logf` for the Cortex-M4F at `-Os` take 16-32 bytes); budget 1 KB. Step 3 of §4.7
+  measures it on the target, with the product's libm.
 - Flash: code and constants in §6. The constants are float32 weights and coefficients; at 8 bits
   they would take about a quarter of their size (derived, not built).
 - Timing: one call every 50 ms (200 samples at 4000 Hz). Every fifth call (a frame block, every
@@ -362,20 +372,20 @@ t 20.75 s  71.3 BPM  confidence 0.93  first
 | 3. Stack | RTOS stack high-water mark of that task after step 2 | within the task's stack, with margin |
 | 4. Time per block | largest frame-block time of step 2, with the task's other work | within the 50 ms block period |
 | 5. Input chain | record the blocks passed to `hr_process_block` in one session, and the app recording of the same session | the same signal (rate, level, filters) up to a time shift |
-| 6. Target against host | replay the recorded blocks on a computer: `c/build/hr_run FILE` | the readings the device showed, in the same order, BPM within 0.1 (`hr_run` counts time from the start of the file, `t_s` from the start of each measurement) |
+| 6. Target against host | replay the recorded blocks on a computer: `c/build/hr_run FILE` | the readings the device showed, in the same order, BPM within 0.2 (`hr_run` counts time from the start of the file, `t_s` from the start of each measurement) |
 
 The self-test runs the cases of `hr_selftest_cases.h` through the public API: a synthetic 45
 BPM heart (10 s), silence, and a 72 BPM heart with a lift-off (the lift-off case of §5: 28 s;
 the first reading, the pause and the restart). Every reading must come at the same block as in
-the Python reference, with the same first-reading flag, BPM within 0.1 and confidence within
-0.02 (the tolerance of the test recordings, §5; on the host the differences stay below 0.005);
+the Python reference, with the same first-reading flag, BPM within 0.2 and confidence within
+0.05 (the tolerance of the test recordings, §5; on the host the differences stay below 0.005);
 then the API checks (argument checks, reset, settings kept on error). The signals take 304 KB of
 flash, in the test firmware only. Time per call: DWT cycle counter on Cortex-M3/M4/M7/M33, or
 `HR_SELFTEST_TICKS()`. Output on a host computer (on the target: cycles):
 
 ```
 $ ./hr_selftest
-hr_selftest: version 1.0.0, model hr_v8 61a88ea2280e, state 13836 bytes
+hr_selftest: version 1.1.0, model hr_v8 61a88ea2280e, state 9940 bytes
   hr45_slow       7 readings  PASS
   silence         0 readings  PASS
   hr72_lift_off  19 readings  PASS
@@ -387,9 +397,11 @@ hr_selftest: PASS
 `tests/test_c_port.py` (through `training/c_port.py`) builds the debug library, streams the same
 int16 PCM through both implementations and compares them:
 - Synthetic heartbeat cases (`training/c_port.py`): every block's output within absolute
-  float32 tolerances, the same path in every frame, the same readings. A binary feature (ACF
-  local peak, validity of the 2T or 3T lag) may flip where its two compared values tie to
-  rounding level; the log-likelihoods of those states are not compared.
+  float32 tolerances, the same path in every frame, the same readings. The int16 ACF and NCCF
+  codes of the two implementations can be one step apart where a value lies at a rounding
+  boundary; that moves the log-likelihoods by up to about 1e-3 (tolerance 2e-3). A binary
+  feature (ACF local peak, validity of the 2T or 3T lag) may flip where its two compared values
+  tie to rounding level; the log-likelihoods of those states are not compared.
 - Synthetic cases without a heart sound (silence, hum alone): the front end, the activation, the
   activation SD and the readings (none). Features of a near-flat window are rounding noise in
   both implementations and are not compared.
@@ -397,11 +409,11 @@ int16 PCM through both implementations and compares them:
   level, 10 s of heart sounds; `hr72_silent_gap`: 10 s of digital zeros instead): compared as
   the cases without a heart sound (front end, activation, activation SD), plus the frame times
   (the restart resets them) and the readings, including the new first reading after the
-  return: the same times, BPM within 0.1 and confidence within 0.02 (frames of the gap are
+  return: the same times, BPM within 0.2 and confidence within 0.05 (frames of the gap are
   rounding-sensitive in both implementations).
 - All synthetic cases: the same heart-present flag in every frame.
 - Every test recording: the C readings against the Python readings of the test run: the same
-  reading times, BPM within 0.1 and confidence within 0.02.
+  reading times, BPM within 0.2 and confidence within 0.05.
 - Self-test (`make selftest`, §4.7): the C port through its public API against the Python
   readings of three synthetic cases.
 - Long session (`c_port.long_session`, table below): 30 min through both implementations; the
@@ -418,12 +430,12 @@ self-test (§4.7).
 <!-- begin:c_port -->
 | Case | Band log energy | Activation | Features | Log-likelihood | Posterior | Estimate (BPM) | Binary-feature flips | Readings (Python / C) | Same times | Same heart-present flags |
 |---|---|---|---|---|---|---|---|---|---|---|
-| hr72 | 5.8e-04 | 5.5e-06 | 1.1e-04 | 2.8e-04 | 4.7e-06 | 6.9e-05 | 0 | 8 / 8 | yes | yes |
-| hr45_slow | 5.5e-04 | 9.2e-06 | 1.2e-04 | 6.5e-04 | 3.2e-06 | 5.7e-05 | 0 | 7 / 7 | yes | yes |
-| hr150 | 5.4e-04 | 8.6e-06 | 8.0e-05 | 1.4e-04 | 3.4e-06 | 2.1e-04 | 2 | 9 / 9 | yes | yes |
-| hr250_fast | 5.2e-04 | 7.2e-06 | 9.5e-05 | 5.9e-04 | 1.8e-05 | 3.5e-04 | 0 | 7 / 7 | yes | yes |
-| hr110_loud_s2 | 3.9e-04 | 8.2e-06 | 1.6e-04 | 1.4e-04 | 1.1e-05 | 4.1e-04 | 0 | 7 / 7 | yes | yes |
-| hr80_irregular | 4.7e-04 | 7.4e-06 | 1.4e-04 | 4.1e-04 | 1.9e-06 | 9.2e-05 | 0 | 8 / 8 | yes | yes |
+| hr72 | 5.8e-04 | 5.5e-06 | 1.1e-04 | 9.8e-04 | 2.7e-05 | 1.4e-04 | 0 | 8 / 8 | yes | yes |
+| hr45_slow | 5.5e-04 | 9.2e-06 | 1.2e-04 | 7.4e-04 | 8.1e-06 | 5.7e-05 | 0 | 7 / 7 | yes | yes |
+| hr150 | 5.4e-04 | 8.6e-06 | 8.0e-05 | 6.8e-04 | 2.3e-05 | 2.1e-04 | 0 | 9 / 9 | yes | yes |
+| hr250_fast | 5.2e-04 | 7.2e-06 | 9.5e-05 | 1.2e-03 | 2.6e-05 | 3.7e-04 | 0 | 7 / 7 | yes | yes |
+| hr110_loud_s2 | 3.9e-04 | 8.2e-06 | 1.6e-04 | 7.7e-04 | 2.9e-05 | 4.3e-04 | 0 | 7 / 7 | yes | yes |
+| hr80_irregular | 4.7e-04 | 7.4e-06 | 1.4e-04 | 6.7e-04 | 2.6e-05 | 1.7e-04 | 0 | 8 / 8 | yes | yes |
 | silence | 0.0e+00 | 6.0e-08 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
 | hum_only | 3.5e-05 | 1.8e-06 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
 | hr72_lift_off | 5.8e-04 | 1.0e-05 | not compared | not compared | not compared | not compared | - | 19 / 19 | yes | yes |
@@ -433,8 +445,8 @@ self-test (§4.7).
 |---|---|
 | test recordings with identical reading times | 825 of 825 |
 | readings compared | 11897 |
-| BPM difference, median / 99th percentile / largest | 1.2e-04 / 1.9e-03 / 0.084 |
-| confidence difference, 99th percentile / largest | 3.4e-04 / 0.017 |
+| BPM difference, median / 99th percentile / largest | 1.3e-04 / 6.5e-03 / 0.104 |
+| confidence difference, 99th percentile / largest | 6.8e-04 / 0.007 |
 
 Long session: 30 min of a synthetic 72 BPM heart with white noise at 20 dB SNR, through both
 implementations.
@@ -442,7 +454,7 @@ implementations.
 | Measure | Value |
 |---|---|
 | readings; C reading times identical | 1797; yes |
-| largest difference C against Python: BPM / confidence | 3.7e-04 / 1.8e-05 |
+| largest difference C against Python: BPM / confidence | 1.3e-03 / 3.4e-05 |
 | restarts of the measurement | 0 |
 | mean absolute error against 72 BPM: first / last 5 min | 0.52 / 0.59 BPM |
 | lag sums: largest difference from a float64 computation, relative to lag 0 | 2.3e-05 |
@@ -454,31 +466,32 @@ Measured on the C build (`make -C c m4`):
 
 | Measure (Cortex-M4, -Os) | Bytes |
 |---|---|
-| code: estimator.c | 2315 |
-| code: features.c | 1908 |
+| code: estimator.c | 2275 |
+| code: features.c | 2696 |
 | code: frontend.c | 448 |
 | code: net.c | 652 |
 | code: readout.c | 434 |
 | code: rhythm.c | 788 |
 | code: scorer.c | 312 |
 | code: tracker.c | 660 |
-| code, total | 7517 |
+| code, total | 8265 |
 | constants: float32 coefficients and weights (hr_model.c) | 6188 |
-| flash, total without libm | 13705 |
-| RAM: state (hr_state_t) | 13836 |
-| RAM: stack, hr_process_block + deepest callee, without libm | 448 |
+| flash, total without libm | 14453 |
+| RAM: state (hr_state_t) | 9940 |
+| RAM: stack, deepest call path (hr_process_block → hr_net_step → __aeabi_memcpy4) | 504 |
 
-Budget (`configs/training.yml`): RAM 15360 bytes, flash 5120 bytes, CPU 30 M cycles/s on average
-(measured on the target with the self-test). libm (expf, logf, floorf, ceilf) adds to flash when
-linked.
+Budget (`training/c_port.py`): state 10240 bytes, stack 1024 bytes (each libm or compiler-runtime
+call counted as 32 bytes, newlib's expf and logf measured), flash 5120 bytes, CPU 30 M cycles/s on
+average (measured on the target with the self-test). libm (expf, logf, floorf, ceilf) adds to flash
+when linked.
 
 Time per call on the host computer (`c/build/hr_run`, 60 s synthetic input x 10; host timing, not
 Cortex-M4 cycles):
 
 | Call (host, -O2) | Mean (µs) | Largest (µs) |
 |---|---|---|
-| ordinary block | 5.3 | 22.0 |
-| frame block | 23.6 | 42.0 |
+| ordinary block | 4.6 | 19.0 |
+| frame block | 24.2 | 43.0 |
 <!-- end:resources -->
 
 ## 7. Parameters

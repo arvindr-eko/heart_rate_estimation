@@ -22,6 +22,38 @@ key test results; the full documentation of a version is `docs/` at its tag.
 6. Commit, tag `vMAJOR.MINOR.PATCH`, push the branch and the tag
    (`git push origin main vMAJOR.MINOR.PATCH`).
 
+## 1.1.0 (2026-11-10), model hr_v8
+Memory of the C port within the firmware's limits: state 10 KB, stack 1 KB.
+- Cortex-M4 build: state 13,836 to 9,940 bytes (budget 10,240); stack of the deepest call path
+  504 bytes, libm included (budget 1,024); code and constants 13,705 to 14,453 bytes without
+  libm (flash budget 5,120, exceeded).
+- Per-frame ACF and NCCF stored as int16 codes (step 1/32767, saturated at ±1), in the Python
+  reference and in C; this changes readings slightly. Kept in float32: the window samples
+  (as codes, last-bit differences of the network output between implementations become code
+  steps that stay in the window for 4 s), YIN (the scorer is steep in it) and the ACF used for
+  the peak positions.
+- C only, the same arithmetic as before: YIN kept only at each state's period, in the score
+  buffer until the state is scored; the ACF at a state's period interpolated when needed; the
+  ACF peaks found while the states are scored, from the lag sums, instead of a stored list; the
+  window's per-sample update in one pass over the lags. Host time per call (3 paired runs,
+  60 s input): ordinary block 5.0 to 3.8 µs, frame block 22.5 to 20.5 µs.
+- Readings against 1.0.0: other reading times in 1 of 544 validation recordings, 0 of 825 test
+  recordings and 0 of 4,736 stress cases; matched readings within 2.3e-4 BPM (99th percentile),
+  largest 0.26 BPM (test) and 2.6 BPM (one stress reading). Every target keeps its result: 9 of
+  14 (12 test, 2 stress); mean absolute error 1.3604 to 1.3605 BPM (test).
+- C port against the Python reference: identical reading times on all 825 test recordings, BPM
+  within 6.5e-3 (99th percentile), largest 0.104. The int16 codes of the two implementations can
+  be one step apart, so the tolerances are wider: log-likelihoods 1e-3 to 2e-3, readings of the
+  30 min session 1e-3 to 2e-3 BPM, recordings and the self-test 0.1 to 0.2 BPM and 0.02 to 0.05
+  confidence.
+- Budgets in `training/c_port.py` (`BUDGET`) instead of `configs/training.yml`; the stack is
+  checked from the call graph and the frames of the Cortex-M4 build (`c_port.m4_stack`, with
+  32 bytes for each libm call), both in `tests/test_c_port.py`.
+- Runs: `20261110_150811_hr_v8_val_v1.1.0`, `20261110_150919_hr_v8_test_v1.1.0`,
+  `20261110_151009_hr_v8_test_v1.1.0_stress`; validation stress
+  `20261110_150905_hr_v8_val_v1.1.0_stress` against `20261110_142225_hr_v8_val_v1.0.0_stress`;
+  golden readings from the test run.
+
 ## 1.0.0 (2026-11-09), model hr_v8
 First versioned release.
 - Python device reference (`src/device/`): band-pass front end, causal TCN, periodicity

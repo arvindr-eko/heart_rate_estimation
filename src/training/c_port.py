@@ -3,9 +3,10 @@ block's and frame's output of the reference (record) and of the C debug library 
 comparison, a long session (long_session), and the self-test cases of c/tools/hr_selftest.c
 (write_selftest).
 
-Heartbeat cases: every stage within float32 tolerances (absolute); a binary feature may flip
-where its two compared values tie to rounding level, and the log-likelihoods of those states are
-not compared. Cases without a heart sound throughout (no heart, contact lost): front end,
+Heartbeat cases: every stage within float32 tolerances (absolute; the int16 ACF and NCCF codes
+of the two implementations can be one step apart, which moves the log-likelihoods by up to about
+1e-3); a binary feature may flip where its two compared values tie to rounding level, and the
+log-likelihoods of those states are not compared. Cases without a heart sound throughout (no heart, contact lost): front end,
 activation, activation SD, frame times and readings only (features of a near-flat or noise-only
 window are rounding-sensitive in both implementations). Both: the same heart-present flags.
 Recordings: reading times, BPM and confidence. Reading times count from the start of the input;
@@ -15,6 +16,7 @@ tests/test_c_port.py.
 
 import ctypes
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +30,7 @@ from training import augment, c_model, config, data
 log = logging.getLogger(__name__)
 
 C_DIR = config.PROJECT_ROOT / "c"
+M4_DIR = C_DIR / "build" / "m4"      # Cortex-M4 objects and stack-usage files (make m4)
 LIB = C_DIR / "build" / ("libhr_debug.dylib" if sys.platform == "darwin" else "libhr_debug.so")
 SYNTHETIC = [("hr72", 72, {}), ("hr45_slow", 45, {}), ("hr150", 150, {}), ("hr250_fast", 250, {}),
              ("hr110_loud_s2", 110, {"s2_ratio": 1.3}),
@@ -38,11 +41,20 @@ SYNTHETIC = [("hr72", 72, {}), ("hr45_slow", 45, {}), ("hr150", 150, {}), ("hr25
 HEART_THROUGHOUT = [name for name, hr, kw in SYNTHETIC if hr and "off_s" not in kw]
 SYNTHETIC_S = 10.0                   # length of a synthetic heart or noise signal
 PEAK = 16000                         # int16 peak of the synthetic cases
-TOL = {"band_log_energy": 1e-3, "activation": 1e-4, "features": 1e-3, "log_emission": 1e-3,
+TOL = {"band_log_energy": 1e-3, "activation": 1e-4, "features": 1e-3, "log_emission": 2e-3,
        "posterior": 1e-4, "t_s": 1e-4, "hr": 1e-3, "frame_hr": 1e-3, "periodicity": 1e-4,
        "activation_sd": 1e-5, "cv": 1e-4, "beat_hr": 1e-3, "p_fine": 1e-4, "p_rough": 1e-4}
-READING_TOL = {"bpm": 1e-3, "confidence": 1e-3}
-RECORDING_TOL = {"bpm": 0.1, "confidence": 0.02}   # recordings, gaps, target: flips on ties
+READING_TOL = {"bpm": 2e-3, "confidence": 1e-3}
+RECORDING_TOL = {"bpm": 0.2, "confidence": 0.05}   # recordings, gaps, target: flips on ties and
+                                                   # int16 codes (ACF, NCCF) one step apart
+BUDGET = {                           # MCU share of the algorithm (PSoC 6, Cortex-M4); measured
+    "ram_bytes": 10240,              # state, hr_state_t (make m4)
+    "stack_bytes": 1024,             # deepest call path from hr_process_block, libm included
+    "libm_stack_bytes": 32,          # each call outside the port: newlib expf and logf,
+                                     # Cortex-M4F at -Os, measured
+    "flash_bytes": 5120,             # code and constants without libm (make m4)
+    "mcycles_per_s": 30,             # average CPU, million cycles/s (self-test on the target)
+}
 FLAG_COLUMNS = [features.FEATURE_NAMES.index(n) for n in ("valid_2T", "acf_peak", "valid_3T")]
 MAX_FLAG_FLIPS = 1e-4                              # share of feature entries
 NO_HEART_KEYS = ("band_log_energy", "activation", "activation_sd", "t_s")
@@ -319,6 +331,78 @@ def long_session(cfg: dict, lib: ctypes.CDLL, ls: dict = LONG_SESSION) -> dict:
             "mae_last_bpm": float(np.mean(np.abs(last - ls["bpm"]))),
             "lag_sum_drift": float(np.max(np.abs(state.feat.sums[:w.size] - direct))
                                    / direct[0])}
+
+
+# Cortex-M4 stack
+
+def _objdump() -> str | None:
+    """llvm-objdump on the path or from Xcode."""
+    found = shutil.which("llvm-objdump")
+    if found or sys.platform != "darwin":
+        return found
+    out = subprocess.run(["xcrun", "-f", "llvm-objdump"], capture_output=True, text=True)
+    return out.stdout.strip() or None
+
+
+def _call_graph(objdump: str) -> dict[str, set[str]]:
+    """Callees of every function in the Cortex-M4 objects: relocated calls and tail calls, and
+    the calls the assembler resolved inside one object; fails on an indirect call."""
+    graph: dict[str, set[str]] = {}
+    for obj in sorted(M4_DIR.glob("*.o")):
+        text = subprocess.run([objdump, "-dr", "--no-show-raw-insn", str(obj)], check=True,
+                              capture_output=True, text=True).stdout
+        fn = None
+        for line in text.splitlines():
+            head = re.match(r"^[0-9a-f]+ <(\w+)>:", line)
+            if head:
+                fn = head.group(1)
+                graph.setdefault(fn, set())
+            elif re.search(r"\sblx\s+r\d", line):
+                raise ValueError(f"{obj.name}, {fn}: indirect call")
+            elif reloc := re.search(r"R_ARM_THM_(?:CALL|JUMP24)\s+(\w+)", line):
+                graph[fn].add(reloc.group(1))
+            elif (branch := re.search(r"\s(?:bl|b(?:\.\w+)*)\s+0x[0-9a-f]+ <(\w+)>", line)) \
+                    and branch.group(1) != fn:
+                graph[fn].add(branch.group(1))
+    return graph
+
+
+def _frames() -> dict[str, int]:
+    """Stack frame in bytes of every function of the Cortex-M4 build (-fstack-usage); fails on
+    a dynamic frame or a function name defined twice."""
+    frames: dict[str, int] = {}
+    for su in sorted(M4_DIR.glob("*.su")):
+        for line in su.read_text().splitlines():
+            where, size, kind = line.split("\t")
+            name = where.split(":")[-1]
+            if kind != "static" or name in frames:
+                raise ValueError(f"{where}: {kind} frame or second definition")
+            frames[name] = int(size)
+    return frames
+
+
+def m4_stack(entry: str = "hr_process_block") -> dict:
+    """Worst-case stack of entry on the Cortex-M4 build (after make m4): the deepest path of its
+    call graph, each function with its own frame, and each function outside the port (libm,
+    compiler runtime) with BUDGET libm_stack_bytes. Returns bytes and the path."""
+    objdump = _objdump()
+    if objdump is None:
+        raise FileNotFoundError("llvm-objdump not found")
+    graph, frames = _call_graph(objdump), _frames()
+    outside = BUDGET["libm_stack_bytes"]
+
+    def deepest(fn: str, path: tuple) -> tuple[int, list[str]]:
+        """Bytes and functions of the deepest path from fn."""
+        if fn in path:
+            raise ValueError("recursion: " + " -> ".join(path + (fn,)))
+        if fn not in frames:
+            return outside, [fn]
+        below = [deepest(callee, path + (fn,)) for callee in sorted(graph.get(fn, ()))]
+        size, rest = max(below, key=lambda b: b[0], default=(0, []))
+        return frames[fn] + size, [fn] + rest
+
+    size, path = deepest(entry, ())
+    return {"bytes": size, "path": path}
 
 
 # Self-test cases

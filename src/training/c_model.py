@@ -5,10 +5,10 @@ hr_model.c (coefficient and weight arrays) for the C port in c/. Values come fro
 modules' own init and load functions, so the C constants equal the Python reference's: filter
 sections and steady-state step responses (frontend), TCN weights (net), scorer weights (scorer;
 the input standardisation folded into the first layer: w1 / std and b1 - (mean / std) @ w1),
-calibration (readout), random-walk kernel, octave shift and estimate window (tracker), and the
-period of every HR state in envelope samples (features). Floats are written with the shortest
-decimal that round-trips in float32. The header records the software version and the config and
-weight checksums.
+calibration (readout), random-walk kernel, octave shift and estimate window (tracker), the
+period of every HR state in envelope samples and the int16 scale of the ACF and NCCF
+(features). Floats are written with the shortest decimal that round-trips in float32. The
+header records the software version and the config and weight checksums.
 """
 
 import hashlib
@@ -109,6 +109,9 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_DEFAULT_CONFIDENCE": rd["confidence"],
         "HR_DEFAULT_SLOW_IRREGULAR_AFTER_S": rd["slow_irregular_after_s"],
         "HR_DEFAULT_LATEST_S": rd["latest_s"]}
+    # int16 storage of the per-frame ACF and NCCF: scale (value to code), step (code to value)
+    ints["HR_CODE_MAX"] = features.CODE_MAX
+    floats |= {"HR_LAG_SCALE": features.LAG_SCALE, "HR_LAG_STEP": 1.0 / features.LAG_SCALE}
     w1 = (sc.w1 / sc.std[:, None]).astype(np.float32)
     b1 = (sc.b1 - (sc.mean / sc.std) @ sc.w1).astype(np.float32)
     arrays = {

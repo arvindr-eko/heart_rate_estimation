@@ -1,5 +1,5 @@
 # Training and evaluation settings (package `training`): data, labels, augmentation, training and
-# evaluation targets, MCU budget. Never used on the device. Stress protocol: training/evaluate.py.
+# evaluation targets. Never used on the device. Stress protocol: training/evaluate.py.
 # Paths are relative to the project root. Device settings: configs/device.yml.
 
 
@@ -123,8 +123,3 @@ targets:                                   # pass/fail per bucket (agreed 2026-1
   all:
     reading_by_10s: 0.99
     half_double_readings: 0.005
-
-budget:                                    # MCU share of the algorithm (PSoC 6 CM4); measured
-  ram_bytes: 15360                         # state and stack (c/: make m4)
-  flash_bytes: 5120                        # code and constants, without libm (make m4)
-  mcycles_per_s: 30                        # average CPU, million cycles/s (self-test, target)

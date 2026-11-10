@@ -17,6 +17,13 @@ def test_hr_grid(cfg):
     assert np.allclose(grid[1:] / grid[:-1], 1.01)
 
 
+def test_stored_codes():
+    """int16 storage: half a step rounds away from zero, beyond CODE_MAX steps saturates."""
+    x = np.array([0.0, 0.124, 0.125, -0.125, 0.374, -0.375, 1e5, -1e5], np.float32)
+    codes = features.stored(x, 4.0) * 4
+    assert codes.tolist() == [0, 0, 1, -1, 1, -2, 32767, -32767]
+
+
 def test_tolerance_and_octaves(cfg):
     """EC13: max(5 BPM, 10 %); half/double within 15 % of 0.5x or 2x."""
     ref = np.array([40.0, 100.0, 100.0, 100.0])

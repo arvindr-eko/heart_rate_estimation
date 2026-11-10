@@ -14,7 +14,13 @@ running sum in the lag loop on the device), then the lag functions ACF (normalis
 NCCF (normalised by the overlap energies) and YIN (1 - cumulative-mean normalised difference),
 read at each state's lag T by linear interpolation. Output per frame: (n_states, n_features),
 float32; None before min_window_s.
-All state is float32 with fixed sizes set at init, as on the device.
+All state is float32 with fixed sizes set at init, as on the device. The device stores the
+per-frame ACF and NCCF read at the states' lags as int16 codes (stored: value x LAG_SCALE rounded
+half away from zero, saturated to ±CODE_MAX); here the same values in float32. Kept in full
+precision: the window samples, which persist for window_s and come from the network, whose last
+bits differ between implementations (as codes, a one-bit difference becomes a code step in
+every frame of the window); YIN, in which the scorer is steep; the ACF for peak detection and
+refinement, which divides by the peak's curvature (the device rebuilds it from the lag sums).
 """
 
 from dataclasses import dataclass
@@ -30,6 +36,8 @@ PEAK_OFFSET_MAX = 0.1   # relative lag offset beyond which no nearby ACF peak is
 EPS = 1e-12
 VAR_FLOOR = 1e-4        # window variance below this (SD 0.01): no periodicity. Flat or near-flat
                         # input (silence); the mean removal from the lag sums cancels there
+CODE_MAX = 32767        # int16 storage: codes -CODE_MAX .. CODE_MAX
+LAG_SCALE = 32767       # ACF and NCCF: ±1 (NCCF beyond ±1: rounding of near-flat overlaps)
 
 
 @dataclass
@@ -59,6 +67,13 @@ def init(cfg: dict, window_s: float | None = None, rate_hz: float | None = None)
     return FeatureState(hist=np.zeros(n_max, np.float32), sums=np.zeros(n_max, np.float32),
                         count=0, lags=(60.0 * rate / hr_grid(cfg)).astype(np.float32),
                         rate_hz=rate, cfg=cfg["features"])
+
+
+def stored(x: np.ndarray, scale: float) -> np.ndarray:
+    """Values after int16 storage at scale: x x scale saturated to ±CODE_MAX, rounded half away
+    from zero, times 1 / scale (float32, the device's operations)."""
+    v = np.clip(np.asarray(x, np.float32) * np.float32(scale), -CODE_MAX, CODE_MAX)
+    return np.trunc(v + np.copysign(np.float32(0.5), v)) * np.float32(1.0 / scale)
 
 
 def window(state: FeatureState) -> np.ndarray:
@@ -141,7 +156,8 @@ def compute(state: FeatureState) -> np.ndarray | None:
     n = min(state.count, state.hist.size)
     if n < state.cfg["min_window_s"] * state.rate_hz:
         return None
-    acf, nccf, yin = lag_functions(state)
+    full_acf, nccf, yin = lag_functions(state)
+    acf, nccf = stored(full_acf, LAG_SCALE), stored(nccf, LAG_SCALE)
     lags = state.lags
     acf_at = {m: at_lags(acf, lags * m, n - 1) for m in (1.0, 0.5, 2.0, 3.0)}
     min_overlap = state.cfg["min_overlap_s"] * state.rate_hz
@@ -158,6 +174,6 @@ def compute(state: FeatureState) -> np.ndarray | None:
             "nccf_T": nccf_t, "yin_T": at_lags(yin, lags, n - 1), "acf_peak": peak,
             "acf_rel_max": acf_t - acf_t.max(), "periods_in_window": np.log(n / lags),
             "acf_3T": np.nan_to_num(acf_at[3.0]), "valid_3T": ~np.isnan(acf_at[3.0]),
-            "peak_offset": peak_offsets(acf, lags), "nccf_2T": nccf_2t}
+            "peak_offset": peak_offsets(full_acf, lags), "nccf_2T": nccf_2t}
     return np.nan_to_num(np.column_stack([cols[name] for name in FEATURE_NAMES])).astype(
         np.float32)

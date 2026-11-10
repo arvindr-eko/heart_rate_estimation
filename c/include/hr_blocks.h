@@ -35,25 +35,36 @@ typedef struct {
 } hr_s1_window_t;
 
 /* Per-frame scratch: lag functions and scores for D, then the tracker prior (E), then the
- * picked beats (R); never live across frames. */
+ * picked beats (R); never live across frames. ACF and NCCF as int16 codes at HR_LAG_SCALE. */
 typedef struct {
-    float acf[HR_WIN];              /* activation ACF, lags 0 .. n - 1 */
+    int16_t acf[HR_WIN];            /* activation ACF, lags 0 .. n - 1 */
     union {
-        struct {
-            float nccf[HR_N_NCCF];
-            float yin[HR_N_YIN];
-        } lag;
+        int16_t nccf[HR_N_NCCF];
         float prior[HR_N_STATES];
         struct {
             uint16_t maxima[HR_MAX_PEAKS];
             uint16_t beats[HR_MAX_PEAKS];
         } rhythm;
     } u;
-    float peaks[HR_MAX_PEAKS];      /* ACF peak positions (parabolic), ascending */
-    float s1_acf[HR_S1_WIN];        /* 25-50 Hz band ACF */
-    float acf_t[HR_N_STATES];       /* activation ACF at each state's period (0 if invalid) */
-    float score[HR_N_STATES];       /* scorer logits, then the tracker evidence */
+    int16_t s1_acf[HR_S1_WIN];      /* 25-50 Hz band ACF */
+    float score[HR_N_STATES];       /* YIN at each state's period, then per state (once its
+                                       features are read) the scorer logit, then the tracker
+                                       evidence */
 } hr_scratch_t;
+
+/* ACF peaks around the current state's lag, searched from the longest lag down as the states
+ * rise (lags fall), on the activation's mean-removed lag sums r[k] rebuilt from the window on
+ * the way down (full precision; peak positions do not depend on the ACF's normalisation). */
+typedef struct {
+    const hr_window_t *win;
+    float mu;                       /* window mean */
+    float head, tail;               /* sums of the first and the last n - k samples */
+    float r_k, r_up;                /* r[k], r[k + 1]; walk at lag k */
+    float below;                    /* largest peak position below the lag; < 0: none */
+    float above;                    /* smallest peak position at or above the lag; < 0: none */
+    uint16_t n, start;              /* window size, ring index of the oldest sample */
+    int16_t k;
+} hr_peak_cursor_t;
 
 typedef struct {
     hr_frontend_t fe;
@@ -99,11 +110,13 @@ float hr_net_step(hr_net_t *nn, const float x[HR_NET_IN]);
 void hr_window_push(float *hist, float *sums, uint16_t cap, uint32_t *count, float x);
 uint16_t hr_window_size(uint16_t cap, uint32_t count);
 uint16_t hr_lag_functions(const float *hist, const float *sums, uint16_t cap, uint32_t count,
-                          float *acf, float *nccf, uint16_t n_nccf, float *yin, uint16_t n_yin);
-uint16_t hr_acf_peaks(const float *acf, uint16_t n, float *peaks);
-float hr_lag_interp(const float *r, uint16_t n, float lag, int *valid);
-void hr_state_features(const hr_scratch_t *sc, uint16_t n, uint16_t n_peaks, uint16_t n_s1,
-                       float acf_t_max, uint16_t state, float in[HR_N_IN]);
+                          int16_t *acf, int16_t *nccf, uint16_t n_nccf, float *yin_t,
+                          float *mean);
+float hr_lag_interp(const int16_t *r, uint16_t n, float lag, int *valid);
+float hr_acf_t(const int16_t *acf, uint16_t n, uint16_t state);
+void hr_peak_cursor_init(hr_peak_cursor_t *pc, const hr_window_t *win, float mu);
+void hr_state_features(const hr_scratch_t *sc, uint16_t n, uint16_t n_s1, float acf_t_max,
+                       uint16_t state, hr_peak_cursor_t *pc, float in[HR_N_IN]);
 
 /* D: logit of one state from its inputs; log-softmax over the states. */
 float hr_scorer_logit(const float in[HR_N_IN]);

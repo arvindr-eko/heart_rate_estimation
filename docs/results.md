@@ -9,7 +9,7 @@ the resources: [realtime_implementation.md](realtime_implementation.md).
 <!-- begin:results_header -->
 | Version | Model | Generated | Commit | Runs |
 |---|---|---|---|---|
-| 1.0.0 | hr_v8 | 2026-11-09 | 77e69ad | val `20261109_170159_hr_v8_val_v1.0.0`, test `20261109_170212_hr_v8_test_v1.0.0`, stress `20261109_171914_hr_v8_test_v1.0.0_stress` |
+| 1.1.0 | hr_v8 | 2026-11-10 | 15fc04b | val `20261110_150811_hr_v8_val_v1.1.0`, test `20261110_150919_hr_v8_test_v1.1.0`, stress `20261110_151009_hr_v8_test_v1.1.0_stress` |
 <!-- end:results_header -->
 
 ## Contents

@@ -5,6 +5,7 @@ Python readings when the local data is available. Skipped without a C toolchain.
 
 import json
 import re
+import shutil
 import subprocess
 
 import pytest
@@ -72,13 +73,27 @@ def test_long_session(cfg, lib):
 
 def test_selftest_passes(cfg, lib):
     """Self-test of the C port (c/tools/hr_selftest.c, product build) on the host with new
-    cases: PASS, and its state fits the RAM budget (configs/training.yml)."""
+    cases: PASS, and its state fits the RAM budget (c_port.BUDGET)."""
     c_port.write_selftest(cfg)
     out = subprocess.run(["make", "-s", "-C", str(c_port.C_DIR), "selftest"],
                          capture_output=True, text=True)
     assert out.returncode == 0 and out.stdout.rstrip().endswith("hr_selftest: PASS"), out.stdout
     state_bytes = int(re.search(r"state (\d+) bytes", out.stdout).group(1))
-    assert state_bytes <= cfg["budget"]["ram_bytes"]
+    assert state_bytes <= c_port.BUDGET["ram_bytes"]
+
+
+def test_m4_budget(cfg, lib):
+    """Cortex-M4 build (make m4): state and the deepest stack path of hr_process_block within
+    c_port.BUDGET."""
+    if not shutil.which("clang"):
+        pytest.skip("no clang for the Cortex-M4 build")
+    out = subprocess.run(["make", "-s", "-C", str(c_port.C_DIR), "m4"], capture_output=True,
+                         text=True)
+    assert out.returncode == 0, out.stdout + out.stderr
+    state_bytes = int(re.search(r"(\d+) B hr_state_size_probe", out.stdout).group(1))
+    stack = c_port.m4_stack()
+    assert state_bytes <= c_port.BUDGET["ram_bytes"]
+    assert stack["bytes"] <= c_port.BUDGET["stack_bytes"], stack
 
 
 def test_readings_match_golden(cfg, lib):

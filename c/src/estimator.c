@@ -139,26 +139,26 @@ static int frame_evidence(hr_state_t *s, float *frame_bpm)
     *frame_bpm = NAN;
     if (n < HR_WIN_MIN)
         return 0;
-    hr_lag_functions(s->act.hist, s->act.sums, HR_WIN, s->act.count, sc->acf, sc->u.lag.nccf,
-                     HR_N_NCCF, sc->u.lag.yin, HR_N_YIN);
-    const uint16_t n_peaks = hr_acf_peaks(sc->acf, n, sc->peaks);
+    float mu;
+    hr_lag_functions(s->act.hist, s->act.sums, HR_WIN, s->act.count, sc->acf, sc->u.nccf,
+                     HR_N_NCCF, sc->score, &mu);
     uint16_t n_s1 = hr_window_size(HR_S1_WIN, s->s1.count);
     if (n_s1 >= HR_S1_WIN_MIN)
         hr_lag_functions(s->s1.hist, s->s1.sums, HR_S1_WIN, s->s1.count, sc->s1_acf, 0, 0, 0, 0);
     else
         n_s1 = 0;
-    /* ACF at each state's period and its maximum */
+    /* maximum of the ACF at the states' periods */
     float acf_max = 0.0f;
     for (int i = 0; i < HR_N_STATES; i++) {
-        int valid;
-        const float v = hr_lag_interp(sc->acf, n, hr_lag[i], &valid);
-        sc->acf_t[i] = valid ? v : 0.0f;
-        acf_max = (i == 0 || sc->acf_t[i] > acf_max) ? sc->acf_t[i] : acf_max;
+        const float v = hr_acf_t(sc->acf, n, (uint16_t)i);
+        acf_max = (i == 0 || v > acf_max) ? v : acf_max;
     }
-    /* features and score per state */
+    /* features and score per state, rates rising (lags falling) for the peak cursor */
+    hr_peak_cursor_t pc;
+    hr_peak_cursor_init(&pc, &s->act, mu);
     for (int i = 0; i < HR_N_STATES; i++) {
         float in[HR_N_IN];
-        hr_state_features(sc, n, n_peaks, n_s1, acf_max, (uint16_t)i, in);
+        hr_state_features(sc, n, n_s1, acf_max, (uint16_t)i, &pc, in);
         sc->score[i] = hr_scorer_logit(in);
 #ifdef HR_DEBUG
         for (int j = 0; j < HR_N_IN; j++)
@@ -197,7 +197,9 @@ static int frame(hr_state_t *s, hr_reading_t *out)
     f->t_s = (float)(s->n_blocks * HR_BLOCK_SAMPLES) / (float)HR_FS_HZ;
     f->estimate_bpm = hr;
     f->frame_bpm = frame_bpm;
-    f->periodicity = have ? sc->acf_t[nearest_state(hr)] : 0.0f;
+    f->periodicity = have ? hr_acf_t(sc->acf, hr_window_size(HR_WIN, s->act.count),
+                                     (uint16_t)nearest_state(hr))
+                          : 0.0f;
     f->activation_sd = activation_sd(&s->act);
     hr_rhythm_analyse(&s->act, hr, sc->u.rhythm.maxima, sc->u.rhythm.beats, &f->interval_cv,
                       &f->beat_bpm);
