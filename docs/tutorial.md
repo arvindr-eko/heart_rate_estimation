@@ -14,6 +14,7 @@ the first rate once it is likely right, then one per second.
 
 ## Contents
 1. [Signal flow](#1-signal-flow)
+   - [The algorithm in 13 steps](#the-algorithm-in-13-steps)
 2. [Terms](#2-terms)
 3. [Time units and windows](#3-time-units-and-windows)
 4. Blocks
@@ -42,7 +43,8 @@ the first rate once it is likely right, then one per second.
 - **Every update, 0.25 s (every 5th block):** feature matrix of 232 candidate rates x 17 features →
   scores → HMM → updated heart-rate estimate (4 estimates per second).
 - **Readings:** the first when the estimate is confident, at 1.5 s at the earliest (2.5 s
-  median for regular hearts, from 4 s for slow or irregular ones); then one per second.
+  median for regular hearts, from 4 s for slow or irregular ones); then one per second while a
+  heartbeat is heard; 2 s without one restart the measurement.
 
 Each block in one line; the name links to its section.
 
@@ -58,6 +60,57 @@ Each block in one line; the name links to its section.
 | [E HMM tracker](#48-e-hmm-tracker) | combines the scores over time into a belief per rate, and an estimate | `(232,)` → `(232,)`, HR `()` |
 | [R Rhythm](#49-r-rhythm) | picks the beats and measures how regular they are | `(n,)` → CV `()` |
 | [F Readout](#410-f-readout-and-output) | decides when to show the first reading, then shows one per second | → reading or nothing |
+
+### The algorithm in 13 steps
+Input: a block of 200 samples (50 ms at 4000 Hz) per call. Values in brackets: settings in
+[`configs/device.yml`](../configs/device.yml).
+
+**Every block (50 ms)**
+1. **Split the sound into 4 bands** ([A](#41-a-front-end)): band-pass filters at 25-50, 50-100,
+   100-200 and 200-400 Hz.
+2. **Measure loudness every 10 ms** ([A](#41-a-front-end)): log of the mean energy per band; 4
+   values per 10 ms step, 5 steps per block.
+3. **Remove each band's slow level** ([B1](#42-b1-normalise)): subtract a running mean (time
+   constant 1 s, `net.norm_tau_s`). Contact pressure and gain drop out; only changes remain.
+4. **Mark where beats sound** ([B2](#43-b2-tcn)): a small causal network (TCN) reads the 4
+   values of each step, looking back 0.63 s, and outputs one activation value in [0, 1], high
+   while a heart sound is playing.
+5. **Keep a history** ([C](#44-c-activation-window), [C′](#45-c-s1-band-window)): the last 4 s of
+   activation (`features.window_s`) and the last 2 s of the 25-50 Hz band, where S1 is loudest
+   (`features.s1_window_s`).
+
+**Every update (0.25 s = 5 blocks)**
+
+6. **Test each candidate rate for repetition** ([C](#46-c-features)): for 232 candidate rates,
+   30 to 299 BPM, 1 % apart, how similar the history is to itself shifted by one beat period;
+   also at half, double and triple the period, against half- and double-rate errors. 17
+   features per candidate.
+7. **Score the candidates** ([D](#47-d-scorer)): a small network turns each candidate's 17
+   features into one score; as probabilities, their maximum is the snapshot HR.
+8. **Track over time** ([E](#48-e-hmm-tracker)): the HMM combines the new scores with its
+   previous belief. The heart rate is assumed to drift slowly (about 4 % per update) and rarely
+   to jump to double or half. Estimate: probability-weighted mean around the peak.
+9. **Check the rhythm** ([R](#49-r-rhythm)): beats picked from the activation; beat-interval
+   CV ≥ 10 % (`decision.regular_max_cv`) means irregular.
+
+**Readout: when a number is shown** ([F](#410-f-readout-and-output))
+
+10. **Gates:** nothing before 1.5 s (`decision.min_s`), nor while the activation is not periodic
+    enough (`decision.min_periodicity` 0.2) or flat (`decision.min_activation_sd` 0.03:
+    silence, hum).
+11. **First reading:**
+    - regular heart: once the probability of being within ±3 BPM reaches 70 %
+      (`readout.confidence`) and the snapshot HR agrees with the estimate within 5 %;
+    - slow (< 50 BPM) or irregular heart: from 4 s (`readout.slow_irregular_after_s`), once the
+      probability of being within ±10 BPM reaches 90 %;
+    - at 8 s (`readout.latest_s`): if the tracker holds at least 30 % of its probability within
+      ±10 BPM of the estimate.
+12. **Then one reading per second** (`stream.output_period_s`). An update without heartbeat
+    (periodicity below 0.15, `decision.lost_periodicity`, or a flat activation) gives no new
+    reading; the last reading stays on show.
+13. **Restart:** 2 s without heartbeat in a row (`decision.lost_after_s`; stethoscope lifted,
+    contact lost) end the measurement. Readings stop, and a new first reading follows steps
+    10-11.
 
 ## 2. Terms
 | Term | Meaning |
@@ -312,7 +365,9 @@ Idea: if beats repeat every T, the activation shifted by T looks like itself. Te
 candidate rates at once.
 
 1. **Lag curves**: from the lag sums, the ACF, NCCF and YIN over all lags, each `(n,)`, and
-   the S1-band ACF `(n1,)`.
+   the S1-band ACF `(n1,)`. The ACF and NCCF are kept in steps of 1/32767 (int16 on the
+   device, the same rounding in the Python reference); the peak positions of columns 10-13 use
+   the ACF before this rounding.
 2. **Read at each rate**: for row i, read the curves at that rate's period T, and at T/2, 2T,
    3T → 17 numbers per row → `(232, 17)`.
 
@@ -468,8 +523,11 @@ yes ─────────────────────────�
 Example at 2.0 s: fine mass 0.72 and periodicity 0.41 give `p_fine` 0.86 ≥ 0.7 → reading
 (2.0 s, 71.9 BPM, 0.86).
 
-After the first reading: the current HMM estimate every 1 s. The gates are not re-checked; on
-contact loss the firmware calls `hr_reset`.
+After the first reading: the current HMM estimate every 1 s while a heartbeat is heard. An
+update without heartbeat (periodicity < 0.15 or activation SD < 0.03) gives no new reading;
+2 s of them in a row restart the measurement (`readout.lost`, `hr_lost`): readings stop until
+the next first reading. Firmware that detects contact loss itself can call `hr_reset` to end
+the readings at once.
 
 **Output.** Python `process()` returns `(t_s, bpm, confidence)` or `None`. C
 `hr_process_block()` returns 1 and fills `hr_reading_t` {`t_s`, `bpm`, `confidence`, `path`,
