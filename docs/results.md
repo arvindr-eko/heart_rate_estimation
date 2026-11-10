@@ -80,7 +80,9 @@ ECG HR (EFAST) in 95.7 %.
 
 ## 4. Time to converge
 Converged: from that reading on, every reading to the end of the recording is within ±3 BPM.
-Left panel: share of recordings with a first reading by each time; right: share converged.
+Left panel: share of recordings with a first reading by each time (thin) and with a first reading
+within ±3 BPM of the ECG (thick); the gap between the two is the share whose first reading is off
+by more than 3 BPM. Right: share converged.
 
 <!-- begin:convergence -->
 | Group | Recordings | First reading, median | Converged: median / 75 % / 90 % by | Converged by 4 / 6 / 9 / 12 s | Not converged * |
