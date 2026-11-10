@@ -162,7 +162,8 @@ stay exact.
 
 ## 5. Training
 `hr-estimation train --out NAME` trains the three parts of a model and writes
-`output/models/NAME_tcn.npz`, `NAME_scorer.npz` and `NAME_calibration.npz`.
+`models/NAME_tcn.npz`, `NAME_scorer.npz` and `NAME_calibration.npz` (released models are tracked
+in git, others ignored).
 - Network (block B): the autocorrelation of its output over a random 2-4 s window must peak at
   the target period, the ECG HR over that window; no beat-by-beat labels are needed. Trained in
   PyTorch, exported to numpy and checked against the streaming implementation.

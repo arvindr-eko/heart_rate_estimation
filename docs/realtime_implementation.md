@@ -70,7 +70,7 @@ workstation or SageMaker, never on the stethoscope. One command, `hr-estimation`
 | Step | Command | Modules | Writes |
 |---|---|---|---|
 | 1. Split and labels | `hr-estimation prepare` | `data` (split by clinician account, once), `labels` (ECG R-peak consensus) | `output/splits/split_v1.csv`, `output/labels/ecg_labels.csv` |
-| 2. Train | `hr-estimation train --out NAME` | `train`, `augment`; scorer inputs streamed through `device` | `output/models/NAME_tcn.npz`, `_scorer.npz`, `_calibration.npz` |
+| 2. Train | `hr-estimation train --out NAME` | `train`, `augment`; scorer inputs streamed through `device` | `models/NAME_tcn.npz`, `_scorer.npz`, `_calibration.npz` |
 | 3. Select the model | `weights: NAME` in `configs/device.yml`, or `--weights NAME` per command | | |
 | 4. Tune on validation | `hr-estimation evaluate --split val` | `evaluate` (every recording streamed through `device.estimator`) | `output/runs/<time>_NAME_val/` |
 | 5. Test, once per candidate | `hr-estimation evaluate --split test`, then with `--stress` | `evaluate`, `augment` (stress conditions) | `output/runs/<time>_NAME_test[_stress]/` |

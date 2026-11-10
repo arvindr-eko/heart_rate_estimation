@@ -12,7 +12,7 @@ paths:
   split_manifest: output/splits/split_v1.csv
   labels: output/labels/ecg_labels.csv     # label table written by `hr-estimation prepare`
   runs_dir: output/runs
-  models_dir: output/models
+  models_dir: models                       # model files; released ones tracked in git
   cache_dir: output/cache
   golden_dir: output/golden                # frozen readings for the regression test
 

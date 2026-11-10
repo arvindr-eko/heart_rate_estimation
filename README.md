@@ -144,8 +144,10 @@ tests/                      pytest suite
 CHANGELOG.md                versions: what changed, model, key results
 pyproject.toml              package and command; dependencies from requirements.txt
 requirements.txt            pinned packages
+models/                     model files: hr_v8 (network, scorer, readout calibration); models
+                            trained later stay out of git until released
 data/                       recordings (not in git)
-output/                     splits, labels, models, runs, caches, golden readings (not in git)
+output/                     splits, labels, runs, caches, golden readings (not in git)
 ```
 A run folder `output/runs/<time>_<model>_<split>[_<tag>]/` holds `config.yml`,
 `per_record.csv`, `readings.json`, `summary.json` (metrics per group), `targets.json`

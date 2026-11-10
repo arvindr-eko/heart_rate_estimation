@@ -1,5 +1,9 @@
 data/
 output/
+
+# model files: only released models are tracked
+models/*
+!models/hr_v8_*.npz
 __pycache__/
 *.pyc
 .DS_Store

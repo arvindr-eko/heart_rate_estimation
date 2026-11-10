@@ -9,7 +9,8 @@ key test results; the full documentation of a version is `docs/` at its tag.
 
 ## Releasing a version
 1. Change the code or the model; set `version` in `pyproject.toml` by the rules above; pin a
-   changed dependency in `requirements.txt`.
+   changed dependency in `requirements.txt`; a new released model gets its line in `.gitignore`
+   (`models/`).
 2. Evaluate: `hr-estimation evaluate --split val`, then once per agreed candidate
    `--split test` and `--split test --stress`, each with `--tag vMAJOR.MINOR.PATCH`.
 3. When readings changed, update the golden readings (`output/golden/`) from the test run; run
@@ -51,6 +52,7 @@ First versioned release.
   restart. For the firmware: self-test against the reference readings of synthetic cases, with
   cycles per call (`make selftest`, host and target), release bundle with checksums (`make
   dist`), integration guide (`docs/realtime_implementation.md` §4).
+- Model files of hr_v8 in `models/` (network, scorer, readout calibration; 10 KB).
 - Installation with pip: `requirements.txt` pins the packages; every run records its checksum.
 - Test results (703 recordings with a trusted ECG): 9 of 14 targets (12 test, 2 stress).
   Regular rhythm at 50-200 BPM: first reading 2.5 s median, 87.7 % within ±3 BPM (target
