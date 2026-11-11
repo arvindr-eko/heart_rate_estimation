@@ -7,6 +7,12 @@
 
 #include "hr_model.h"
 
+/* Q signal quality (quality.py): averaged 25-100 Hz and 200-400 Hz band energies. */
+typedef struct {
+    float low, high;
+    uint8_t set;                    /* a sample has been seen */
+} hr_quality_t;
+
 /* A front end (frontend.py): direct form II transposed states per band and section. */
 typedef struct {
     float z[HR_N_BANDS][HR_N_SECTIONS][2];
@@ -68,6 +74,7 @@ typedef struct {
 
 typedef struct {
     hr_frontend_t fe;
+    hr_quality_t q;
     hr_net_t nn;
     hr_window_t act;                /* activation, HR_WIN samples at HR_ENV_RATE_HZ */
     hr_s1_window_t s1;              /* 25-50 Hz band, decimated by HR_S1_DECIMATION */
@@ -83,6 +90,7 @@ typedef struct {
     hr_frame_info_t info;
     uint16_t absent_frames;         /* frames in a row without a heartbeat (after the first
                                        reading) */
+    uint16_t present_frames;        /* frames in a row with a heart present */
     uint8_t s1_n;
     uint8_t has_reading;
     hr_scratch_t scratch;
@@ -94,6 +102,11 @@ typedef struct {
     uint8_t dbg_has_features;
 #endif
 } hr_state_t;
+
+/* Q: per envelope sample; the high-band ratio per frame. */
+void hr_quality_init(hr_quality_t *q);
+void hr_quality_update(hr_quality_t *q, const float env[HR_N_BANDS]);
+float hr_quality_high_band(const hr_quality_t *q);
 
 /* A: filter one block of int16 samples (full scale 32768), log mean energy per band and
  * envelope interval. */
@@ -114,6 +127,7 @@ uint16_t hr_lag_functions(const float *hist, const float *sums, uint16_t cap, ui
                           float *mean);
 float hr_lag_interp(const int16_t *r, uint16_t n, float lag, int *valid);
 float hr_acf_t(const int16_t *acf, uint16_t n, uint16_t state);
+float hr_recent_periodicity(const hr_window_t *act, float period);
 void hr_peak_cursor_init(hr_peak_cursor_t *pc, const hr_window_t *win, float mu);
 void hr_state_features(const hr_scratch_t *sc, uint16_t n, uint16_t n_s1, float acf_t_max,
                        uint16_t state, hr_peak_cursor_t *pc, float in[HR_N_IN]);
@@ -135,8 +149,11 @@ void hr_rhythm_analyse(const hr_window_t *act, float hr, uint16_t *maxima, uint1
 /* F: posterior mass near hr, calibrated probability, path, first-reading rule, loss rule. */
 float hr_mass_within(const float posterior[HR_N_STATES], float hr, float half_width_bpm);
 float hr_probability(const float weights[3], float mass, float periodicity);
+float hr_presence(const hr_frame_info_t *f, float recent, float hf, int agree, float rough_mass,
+                  float fine_mass);
+int hr_heart_present(const hr_frame_info_t *f, float recent, int clean, float p_present);
 int hr_first_due(const hr_state_t *s, const hr_frame_info_t *f, float rough_mass, int agree);
-int hr_heart_absent(const hr_frame_info_t *f);
+int hr_heart_absent(const hr_frame_info_t *f, float recent, int noisy, float p_present);
 int hr_lost(hr_state_t *s, int absent);
 
 #endif

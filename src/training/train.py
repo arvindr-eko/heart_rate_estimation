@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 from torch import nn
 
 from device import estimator, features, frontend, net, readout
@@ -401,3 +402,75 @@ def calibrate(cfg: dict) -> None:
     np.savez(readout.calibration_path(cfg), **weights)
     log.info("calibration: %d frames; fine %s, rough %s", len(rows),
              np.round(weights["fine"], 2).tolist(), np.round(weights["rough"], 2).tolist())
+
+
+def _presence_rows(cfg: dict, task: tuple) -> np.ndarray:
+    """Presence-gate inputs (readout.presence_features) and label of the frames of one task,
+    streamed without a gate: ("heart", file) frames from presence.min_t_s, label 1; ("murmur",
+    file, seed, beats) the recording with a systolic murmur (augment.murmur), label 1; ("clip",
+    kind, seed) a no-heart clip, label 0; ("lift", file, kind, seed) a lift-off, frames from
+    lift_skip_s after it, label 0."""
+    pc = cfg["presence"]
+    if task[0] == "murmur":
+        rng = np.random.default_rng(pc["seed"] * 1000 + task[2])
+        audio = augment.murmur(cfg, data.load_wav(cfg, task[1]), task[3],
+                               rng.uniform(*pc["murmur_level"]), rng)
+        start, label = pc["min_t_s"], 1.0
+    elif task[0] == "clip":
+        rng = np.random.default_rng(pc["seed"] * 1000 + task[2])
+        audio = augment.no_heart_clip(cfg, task[1], int(pc["clip_s"] * cfg["stream"]["fs_hz"]), rng)
+        start, label = pc["min_t_s"], 0.0
+    elif task[0] == "lift":
+        rng = np.random.default_rng(pc["seed"] * 1000 + task[3])
+        audio = augment.lift_off(cfg, data.load_wav(cfg, task[1]), pc["lift_at_s"], pc["off_s"],
+                                 task[2], pc["lift_kinds"][task[2]], rng)
+        audio = audio[: int((pc["lift_at_s"] + pc["off_s"]) * cfg["stream"]["fs_hz"])]
+        start, label = pc["lift_at_s"] + pc["lift_skip_s"], 0.0
+    else:
+        audio, start, label = data.load_wav(cfg, task[1]), pc["min_t_s"], 1.0
+    state = estimator.init(cfg, keep_trace=True)
+    state.presence = None
+    _, trace = estimator.run(cfg, audio, state=state)
+    frame_s = estimator.frame_seconds(cfg)
+    rows = [np.r_[f["presence_x"], label] for k, f in enumerate(trace)
+            if (k + 1) * frame_s >= start - 1e-9 and np.isfinite(f["hr"])]
+    return np.array(rows, dtype=float).reshape(-1, len(readout.PRESENCE_FEATURES) + 1)
+
+
+def fit_presence(cfg: dict) -> None:
+    """Fit the heart-present gate on the training split: MLP (presence.hidden ReLU units, L2
+    presence.alpha), classes balanced, of readout.PRESENCE_FEATURES on heart frames (trusted
+    ECG, beats heard) against no-heart clips (augment.no_heart_clip, presence.kinds) and
+    lift-offs (augment.lift_off) spliced into
+    presence.lift_recordings recordings; heart frames also with a systolic murmur
+    (augment.murmur) on every murmur_every-th recording; written to
+    <models_dir>/<weights>_presence.npz."""
+    pc = cfg["presence"]
+    df = data.load_split(cfg, "train")
+    df = df[df["ecg_trusted"] & ~df["unheard"]]
+    files = list(df["output_filename"])
+    beats = labels.build_beats(cfg, df)
+    tasks = [("heart", f) for f in files]
+    tasks += [("murmur", f, j, beats[f]["beats"]) for j, f in enumerate(files)
+              if j % pc["murmur_every"] == 0]
+    tasks += [("clip", k, s) for k in pc["kinds"] for s in range(pc["clip_seeds"])]
+    tasks += [("lift", f, k, j) for j, f in enumerate(files[: pc["lift_recordings"]])
+              for k in pc["lift_kinds"]]
+    rows = np.vstack(data.map_records(cfg, _presence_rows, tasks, "presence", chunksize=8))
+    x, y = rows[:, :-1], rows[:, -1] > 0.5
+    mu, sd = x.mean(0), x.std(0) + 1e-9
+    # classes balanced by resampling the no-heart frames to the number of heart frames
+    rng = np.random.default_rng(pc["seed"])
+    idx = np.r_[np.flatnonzero(y), rng.choice(np.flatnonzero(~y), size=int(y.sum()))]
+    fit = MLPClassifier((pc["hidden"],), alpha=pc["alpha"], max_iter=pc["max_iter"],
+                        random_state=pc["seed"]).fit((x[idx] - mu) / sd, y[idx])
+    w1 = (fit.coefs_[0] / sd[:, None]).astype(np.float32)
+    b1 = (fit.intercepts_[0] - (mu / sd) @ fit.coefs_[0]).astype(np.float32)
+    w2, b2 = fit.coefs_[1][:, 0].astype(np.float32), np.float32(fit.intercepts_[1][0])
+    np.savez(readout.presence_path(cfg), w1=w1, b1=b1, w2=w2, b2=b2)
+    model = readout.Presence(w1=w1, b1=b1, w2=w2, b2=float(b2))
+    p = np.array([readout.presence(model, v.astype(np.float32)) for v in x])
+    dc = cfg["decision"]
+    log.info("presence: %d heart, %d no-heart frames; at %.2f: heart kept %.3f, no-heart passed "
+             "%.3f", y.sum(), (~y).sum(), dc["presence_min"], (p[y] >= dc["presence_min"]).mean(),
+             (p[~y] >= dc["presence_min"]).mean())

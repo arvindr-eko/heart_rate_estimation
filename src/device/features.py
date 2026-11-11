@@ -150,6 +150,27 @@ def peak_offsets(r: np.ndarray, lags: np.ndarray) -> np.ndarray:
     return np.clip((nearest - lags) / lags, -PEAK_OFFSET_MAX, PEAK_OFFSET_MAX).astype(np.float32)
 
 
+def recent_periodicity(state: FeatureState, period: float, recent_s: float, tol_rel: float,
+                       min_overlap_s: float) -> float:
+    """Heartbeats in the latest samples: highest normalised correlation of the last stretch of
+    the window with itself one period earlier, over lags within ±tol_rel of period (samples). The
+    stretch is recent_s long, at least one period plus min_overlap_s. Near 0 once the beats stop
+    (noise or a flat signal), unlike the full-window ACF, which holds the past window_s of beats.
+    0 with too few samples or a flat overlap."""
+    w = window(state)
+    overlap = int(round(min_overlap_s * state.rate_hz))
+    lo, hi = max(int(np.floor(period * (1 - tol_rel))), 1), int(np.ceil(period * (1 + tol_rel)))
+    n = min(w.size, max(int(round(recent_s * state.rate_hz)), hi + overlap))
+    x = w[w.size - n:]
+    best = 0.0
+    for lag in range(lo, min(hi, n - overlap) + 1):
+        a, b = x[lag:] - x[lag:].mean(), x[:n - lag] - x[:n - lag].mean()
+        ea, eb = float(np.dot(a, a)), float(np.dot(b, b))
+        if min(ea, eb) > VAR_FLOOR * a.size:
+            best = max(best, float(np.dot(a, b)) / float(np.sqrt(ea * eb)))
+    return best
+
+
 def compute(state: FeatureState) -> np.ndarray | None:
     """Features (n_states, len(FEATURE_NAMES)) of the current window; None before
     min_window_s."""

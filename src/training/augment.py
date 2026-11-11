@@ -1,7 +1,7 @@
 """Synthetic PCG, noise at a set SNR, and training-data augmentation (training split only).
 
 Synthetic PCG: S1 and S2 as windowed sinusoids at a known HR, for unit tests and stress cases.
-Noise: white, friction, hum, breath, scaled to an in-band SNR.
+Noise: white, friction, hum, breath, taps, handling, scaled to an in-band SNR.
 Augmentation: beat-synchronous time warping, speed-up to very fast rates, rhythm jitter, gain,
 spectral tilt, noise. Time warping keeps each cycle's first keep_s after the R-peak (S1, systole,
 S2) and resamples only the diastole, as HR changes mostly shorten or lengthen diastole; rates
@@ -15,6 +15,8 @@ import pandas as pd
 from scipy import signal
 
 SNR_BAND_HZ = (25, 400)
+NO_HEART_PEAK = 0.3       # no-heart clips: noise peak (full scale 1.0)
+NO_HEART_FLOOR = 0.003    # and the SD of the room floor under it
 
 
 def sound(fs: int, freq_hz: float, dur_s: float, rng: np.random.Generator) -> np.ndarray:
@@ -63,9 +65,61 @@ def band_noise(n: int, fs: int, band_hz: tuple, rng: np.random.Generator) -> np.
     return x / max(x.std(), 1e-12)
 
 
+def events(n: int, fs: int, rate_hz: float, shape, rng: np.random.Generator) -> np.ndarray:
+    """Transients at random times (exponential gaps, mean 1 / rate_hz) and random amplitudes;
+    shape(rng) returns one event's samples."""
+    x, t = np.zeros(n + fs), rng.exponential(1.0 / rate_hz)
+    while t < n / fs:
+        ev = rng.uniform(0.3, 3.0) * shape(rng)
+        i = int(t * fs)
+        x[i:i + ev.size] += ev[: x.size - i]
+        t += 0.1 + rng.exponential(1.0 / rate_hz)
+    return x[:n]
+
+
+def tap(fs: int, rng: np.random.Generator) -> np.ndarray:
+    """Finger tap on the chest piece: 2 ms broadband click and a damped diaphragm ring
+    (40-200 Hz, decay 10-40 ms)."""
+    t = np.arange(int(0.15 * fs)) / fs
+    ring = np.exp(-t / rng.uniform(0.01, 0.04)) * np.sin(2 * np.pi * rng.uniform(40, 200) * t)
+    ring[: int(0.002 * fs)] += rng.standard_normal(int(0.002 * fs))
+    return ring
+
+
+def thump(fs: int, rng: np.random.Generator) -> np.ndarray:
+    """Handling thump: low-frequency damped pulse (10-40 Hz, decay 30-100 ms)."""
+    t = np.arange(int(0.3 * fs)) / fs
+    return np.exp(-t / rng.uniform(0.03, 0.1)) * np.sin(2 * np.pi * rng.uniform(10, 40) * t)
+
+
 def noise(kind: str, n: int, fs: int, rng: np.random.Generator) -> np.ndarray:
-    """Noise of one type: white, friction (bursts), hum (mains + harmonics), breath."""
+    """Noise of one type: white, friction (bursts), hum (mains + harmonics), breath, taps (finger
+    taps on the chest piece, about 1.5 per s), rhythmic_taps (taps at a steady 50-110 per min),
+    handling (thumps and friction), scratch (fingernail on the diaphragm: 300-1500 Hz strokes,
+    about 3 per s), speech (talking nearby: 100-400 Hz noise at a 3-6 Hz syllable rate)."""
     t = np.arange(n) / fs
+    if kind == "taps":
+        return events(n, fs, 1.5, lambda r: tap(fs, r), rng)
+    if kind == "rhythmic_taps":
+        x, period = np.zeros(n + fs), 60.0 / rng.uniform(50, 110)
+        for t0 in np.arange(rng.uniform(0, period), n / fs, period):
+            ev = rng.uniform(0.7, 1.3) * tap(fs, rng)
+            i = int((t0 + 0.03 * period * rng.standard_normal()) * fs)
+            x[max(i, 0):max(i, 0) + ev.size] += ev
+        return x[:n]
+    if kind == "handling":
+        return (events(n, fs, 1.0, lambda r: thump(fs, r), rng)
+                + 0.5 * noise("friction", n, fs, rng))
+    if kind == "scratch":
+        gate = np.zeros(n)
+        for start in rng.uniform(0, n / fs, size=max(1, int(3 * n / fs))):
+            i, length = int(start * fs), int(rng.uniform(0.08, 0.25) * fs)
+            gate[i:i + length] = rng.uniform(0.5, 2.0) * np.hanning(len(gate[i:i + length]))
+        return band_noise(n, fs, (300, 1500), rng) * gate
+    if kind == "speech":
+        rate = rng.uniform(3.0, 6.0)
+        syllables = np.maximum(np.sin(2 * np.pi * rate * t + rng.uniform(0, 2 * np.pi)), 0) ** 2
+        return band_noise(n, fs, (100, 400), rng) * syllables
     if kind == "white":
         return band_noise(n, fs, (20, 1000), rng)
     if kind == "friction":
@@ -83,6 +137,56 @@ def noise(kind: str, n: int, fs: int, rng: np.random.Generator) -> np.ndarray:
         envelope = np.sin(np.pi * rate * t + rng.uniform(0, np.pi)) ** 2
         return band_noise(n, fs, (100, 800), rng) * envelope
     raise ValueError(f"unknown noise type {kind}")
+
+
+def channel(x: np.ndarray, fs: int, cfg: dict) -> np.ndarray:
+    """Synthetic sound as the device records it: linear-phase FIR with the measured channel
+    magnitude (augment.channel_hz / channel_db), group delay removed."""
+    ag = cfg["augment"]
+    gain = 10 ** (np.asarray(ag["channel_db"], float) / 20)
+    taps = signal.firwin2(255, np.asarray(ag["channel_hz"], float), gain, fs=fs)
+    return signal.fftconvolve(x, taps, mode="same")
+
+
+def no_heart_clip(cfg: dict, kind: str, n: int, rng: np.random.Generator) -> np.ndarray:
+    """No heart sound, as recorded: n samples of one noise kind (peak NO_HEART_PEAK) over a
+    faint room floor (NO_HEART_FLOOR), through the device channel."""
+    fs = cfg["stream"]["fs_hz"]
+    x = noise(kind, n, fs, rng)
+    x = (x / max(np.abs(x).max(), 1e-9) * NO_HEART_PEAK
+         + NO_HEART_FLOOR * band_noise(n, fs, (20, 1000), rng))
+    return channel(x, fs, cfg)
+
+
+def lift_off(cfg: dict, audio: np.ndarray, at_s: float, off_s: float, kind: str, level: float,
+             rng: np.random.Generator) -> np.ndarray:
+    """Recording with the stethoscope lifted at at_s for off_s: noise of one kind (silence:
+    zeros) at level x the SD of the recording before at_s, through the device channel; then the
+    rest of the recording."""
+    fs = cfg["stream"]["fs_hz"]
+    i, n_off = int(at_s * fs), int(off_s * fs)
+    off = np.zeros(n_off) if kind == "silence" else channel(noise(kind, n_off, fs, rng), fs, cfg)
+    off = off / max(off.std(), 1e-12) * audio[:i].std() * level
+    return np.concatenate([audio[:i], off, audio[i:]]).astype(np.float32)
+
+
+def murmur(cfg: dict, audio: np.ndarray, beats_s: np.ndarray, level: float,
+           rng: np.random.Generator) -> np.ndarray:
+    """Recording with a systolic murmur: 150-400 Hz noise from 40 ms after each beat (ECG
+    R-peak) to the end of systole (shortening with HR as in synthetic_pcg), Hann-shaped, through
+    the device channel, at level x the recording's SD."""
+    fs = cfg["stream"]["fs_hz"]
+    beats_s = np.asarray(beats_s, float)
+    hr = 60.0 / np.median(np.diff(beats_s)) if beats_s.size > 1 else 70.0
+    systole_s = float(np.clip(0.35 - 0.0012 * (hr - 60), 0.18, 0.40))
+    gate = np.zeros(audio.size)
+    for t1 in beats_s:
+        i, j = int((t1 + 0.04) * fs), int((t1 + systole_s - 0.02) * fs)
+        if 0 <= i < j <= audio.size:
+            gate[i:j] = np.hanning(j - i)
+    mur = channel(band_noise(audio.size, fs, (150, 400), rng) * gate, fs, cfg)
+    mur = mur / max(mur.std(), 1e-12) * np.std(audio) * level
+    return (audio + mur).astype(np.float32)
 
 
 def band_power(x: np.ndarray, fs: int) -> float:

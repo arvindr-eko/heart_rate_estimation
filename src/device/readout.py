@@ -30,6 +30,11 @@ from pathlib import Path
 
 import numpy as np
 
+PRESENCE_FEATURES = ("periodicity", "recent", "ln_activation_sd", "agree", "rough_mass",
+                     "fine_mass", "high_band", "high_band_x_periodicity")
+PRESENCE_SD_FLOOR = 1e-4    # activation SD floor before the logarithm
+PRESENCE_HF_RANGE = (-12.0, 4.0)   # high-band ratio clipped to this range (-inf: no input yet)
+
 @dataclass
 class Calibration:
     """Logistic coefficients (intercept, posterior mass, periodicity) of the probability of being
@@ -41,10 +46,11 @@ class Calibration:
 @dataclass
 class ReadoutState:
     """Times of the first and the latest reading (None before the first); frames without a
-    heartbeat since the first reading."""
+    heartbeat since the first reading; consecutive frames with a heart present."""
     first_at: float | None = None
     last_output: float | None = None
     absent_frames: int = 0
+    present_frames: int = 0
 
 
 def calibration_path(cfg: dict) -> Path:
@@ -94,19 +100,82 @@ def confidence_of(a: dict) -> float:
     return a["p_fine"] if a["path"] == "regular" else a["p_rough"]
 
 
-def heart_present(cfg: dict, periodicity: float, activation_sd: float) -> bool:
-    """True while a heartbeat is heard: periodicity and activation SD at or above their gates
-    (silence, steady noise and mains hum fall below)."""
+@dataclass
+class Presence:
+    """Learned heart-present gate (training.train.fit_presence): small MLP over
+    PRESENCE_FEATURES, one ReLU hidden layer (input standardisation folded into it) and a
+    logistic output."""
+    w1: np.ndarray      # (features, hidden)
+    b1: np.ndarray      # (hidden,)
+    w2: np.ndarray      # (hidden,)
+    b2: float
+
+
+def presence_path(cfg: dict) -> Path:
+    """Presence gate file of the configured model: <models_dir>/<weights>_presence.npz."""
+    return cfg["paths"]["models_dir"] / f"{cfg['weights']}_presence.npz"
+
+
+def load_presence(cfg: dict) -> Presence | None:
+    """The model's presence gate; None when not fitted (no gate)."""
+    path = presence_path(cfg)
+    if not path.is_file():
+        return None
+    z = np.load(path)
+    return Presence(w1=z["w1"].astype(np.float32), b1=z["b1"].astype(np.float32),
+                    w2=z["w2"].astype(np.float32), b2=float(z["b2"]))
+
+
+def presence_features(periodicity: float, recent: float, activation_sd: float, hf: float,
+                      a: dict) -> np.ndarray:
+    """Inputs of the presence gate (PRESENCE_FEATURES): periodicity, recent heartbeat, ln
+    activation SD (floored), frame agreement, the posterior masses, the high-band ratio (block Q,
+    clipped to PRESENCE_HF_RANGE) and its product with the periodicity (high-band sound in step
+    with the heartbeat, e.g. a murmur, against sound without it)."""
+    h = min(max(hf, PRESENCE_HF_RANGE[0]), PRESENCE_HF_RANGE[1])
+    return np.array([periodicity, recent, np.log(max(activation_sd, PRESENCE_SD_FLOOR)),
+                     float(a["agree"]), a["rough_mass"], a["fine_mass"], h, h * periodicity],
+                    np.float32)
+
+
+def presence(model: Presence | None, x: np.ndarray) -> float:
+    """Heart-present probability of the gate; 1 without a gate."""
+    if model is None:
+        return 1.0
+    hidden = np.maximum(x @ model.w1 + model.b1, np.float32(0.0))
+    return float(1.0 / (1.0 + np.exp(-(model.b2 + float(np.dot(model.w2, hidden))))))
+
+
+def heart_present(cfg: dict, periodicity: float, activation_sd: float, recent: float = 1.0,
+                  clean: bool = True, p_present: float = 1.0) -> bool:
+    """True while a heartbeat is heard: periodicity, activation SD and the recent heartbeat
+    (estimator.recent_heartbeat) at or above their gates (silence, steady noise and mains hum
+    fall below the first two; noise after the heart stops, the third) and the signal clean
+    (block Q: no excess 200-400 Hz energy)."""
     dc = cfg["decision"]
-    return periodicity >= dc["min_periodicity"] and activation_sd >= dc["min_activation_sd"]
+    return (clean and p_present >= dc["presence_min"] and periodicity >= dc["min_periodicity"]
+            and activation_sd >= dc["min_activation_sd"] and recent >= dc["recent_min"])
 
 
-def heart_absent(cfg: dict, periodicity: float, activation_sd: float) -> bool:
+def heart_absent(cfg: dict, periodicity: float, activation_sd: float, recent: float = 1.0,
+                 noisy: bool = False, p_present: float = 1.0) -> bool:
     """During a measurement: no heartbeat heard. Hysteresis against heart_present: periodicity
     below lost_periodicity (lower than min_periodicity, so irregular rhythms, whose periodicity
-    dips, are not dropped) or activation SD below min_activation_sd."""
+    dips, are not dropped), activation SD below min_activation_sd, the recent heartbeat below
+    recent_lost, or the signal noisy (block Q: 200-400 Hz energy above hf_lost)."""
     dc = cfg["decision"]
-    return periodicity < dc["lost_periodicity"] or activation_sd < dc["min_activation_sd"]
+    return (noisy or p_present < dc["presence_lost"] or periodicity < dc["lost_periodicity"]
+            or activation_sd < dc["min_activation_sd"] or recent < dc["recent_lost"])
+
+
+def frames_of(seconds: float, frame_s: float) -> int:
+    """Whole frames covering seconds."""
+    return int(np.ceil(seconds / frame_s - 1e-9))
+
+
+def track(state: ReadoutState, present: bool) -> None:
+    """Per frame: run of frames with a heart present."""
+    state.present_frames = state.present_frames + 1 if present else 0
 
 
 def lost_frames(cfg: dict, frame_s: float) -> int:
@@ -125,11 +194,14 @@ def lost(state: ReadoutState, cfg: dict, absent: bool, frame_s: float) -> bool:
 
 
 def first_due(cfg: dict, a: dict, periodicity: float, activation_sd: float, hr: float,
-              t: float) -> bool:
-    """True when the first reading is due at time t (module docstring)."""
+              t: float, recent: float = 1.0, state: ReadoutState | None = None,
+              frame_s: float = 0.25, clean: bool = True, p_present: float = 1.0) -> bool:
+    """True when the first reading is due at time t (module docstring), the heart present for
+    the last confirm_s (state.present_frames, counted by track)."""
     rd, dc = cfg["readout"], cfg["decision"]
     if (np.isnan(hr) or t + 1e-9 < dc["min_s"]
-            or not heart_present(cfg, periodicity, activation_sd)):
+            or not heart_present(cfg, periodicity, activation_sd, recent, clean, p_present)
+            or (state is not None and state.present_frames < frames_of(dc["confirm_s"], frame_s))):
         return False
     if t + 1e-9 >= rd["latest_s"]:
         return a["rough_mass"] >= dc["forced_min_mass"]

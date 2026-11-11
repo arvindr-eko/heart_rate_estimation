@@ -2,15 +2,17 @@
 conditions (start-up, contact loss, gain, DC offset), extreme rates, rhythm and sound variants,
 mains hum; and inputs without heart sounds (silence, noise only), which must give no reading.
 Expected behaviour follows the readout rule: accurate first reading for regular hearts at
-common rates, rough first reading for slow ones, refined to ±fine_bpm by latest_s."""
+common rates, rough first reading for slow ones, refined to ±fine_bpm by latest_s. Signals pass
+through the device channel (augment.channel), as every recorded sound does."""
 
 import numpy as np
 import pytest
 
 from device import estimator
-from training import augment
+from training import augment, config
 
 FS = 4000
+CFG = config.load()
 
 
 def readings(cfg, audio):
@@ -25,9 +27,10 @@ def shown_at(reads, t):
 
 
 def noisy(hr, seed=1, snr_db=20.0, **kw):
-    """Synthetic PCG at hr with white noise at snr_db."""
+    """Synthetic PCG at hr with white noise at snr_db, through the device channel."""
     audio, _ = augment.synthetic_pcg(hr, seed=seed, **kw)
-    return augment.add_noise(audio, FS, "white", snr_db, seed)
+    return augment.channel(augment.add_noise(audio, FS, "white", snr_db, seed), FS,
+                           CFG).astype(np.float32)
 
 
 @pytest.mark.parametrize("hr", [55, 72, 100, 130])
@@ -52,9 +55,9 @@ def test_silence_no_reading(cfg):
 
 
 def noise_only(kind, seed):
-    """17 s of one noise type without heart sounds."""
-    x = augment.noise(kind, 17 * FS, FS, np.random.default_rng(seed))
-    return (0.05 * x / x.std()).astype(np.float32)
+    """17 s of one noise type without heart sounds, as recorded (augment.no_heart_clip)."""
+    x = augment.no_heart_clip(CFG, kind, 17 * FS, np.random.default_rng(seed))
+    return x.astype(np.float32)
 
 
 @pytest.mark.parametrize("seed", range(5))
@@ -63,10 +66,25 @@ def test_hum_only_no_reading(cfg, seed):
     assert readings(cfg, noise_only("hum", seed)) == []
 
 
-@pytest.mark.xfail(strict=True, reason="known limitation: noise alone can pass as slow beats")
-@pytest.mark.parametrize("kind", ["white", "breath", "friction"])
+@pytest.mark.parametrize("kind", ["white", "breath", "scratch"])
 def test_noise_only_no_reading(cfg, kind):
-    """White, breath or friction noise without heart sounds: no reading for any of 5 seeds."""
+    """Noise without heart sounds (room, breath, scratching): no reading for any of 5 seeds."""
+    assert all(readings(cfg, noise_only(kind, seed)) == [] for seed in range(5))
+
+
+@pytest.mark.parametrize("kind", ["taps", "handling", "friction"])
+def test_transient_noise_rare_readings(cfg, kind):
+    """Finger taps on the chest piece, handling, friction: at most one reading per 3 s of input
+    over 5 seeds (the release gave about one per 2 s for taps and handling)."""
+    n = sum(len(readings(cfg, noise_only(kind, seed))) for seed in range(5))
+    assert n <= 5 * 17 / 3
+
+
+@pytest.mark.xfail(strict=True, reason="known limitation: taps at a heart rate and speech nearby "
+                                       "can pass as heartbeats")
+@pytest.mark.parametrize("kind", ["rhythmic_taps", "speech"])
+def test_rhythmic_noise_no_reading(cfg, kind):
+    """Rhythmic taps or speech without heart sounds: no reading for any of 5 seeds."""
     assert all(readings(cfg, noise_only(kind, seed)) == [] for seed in range(5))
 
 
@@ -109,28 +127,28 @@ def test_startup_transient(cfg):
 
 
 def test_contact_loss_recovers(cfg):
-    """1.5 s of silence mid-measurement: the measurement goes on (no restart) and the reading on
-    show is within ±fine_bpm 4 s later."""
+    """1.5 s of silence mid-measurement (the measurement may end: contact loss is detected within
+    about 2-3 s): a reading within ±fine_bpm is on show 4 s after the silence."""
     audio = noisy(72)
     audio[6 * FS:int(7.5 * FS)] = 0.0
-    reads, trace = estimator.run(cfg, audio, keep_trace=True)
-    assert np.all(np.diff([f["t"] for f in trace]) > 0)
+    reads = readings(cfg, audio)
     assert abs(shown_at(reads, 11.5) - 72) <= cfg["eval"]["fine_bpm"]
 
 
 @pytest.mark.parametrize("gap", ["silence", "white", "hum"])
 def test_lift_off_stops_and_restarts(cfg, gap):
     """Stethoscope lifted for 10 s (silence, room noise or hum) and put back: readings stop
-    within 6 s of the lift-off, none appear without the heart, and its return gives a new first
+    within 4 s of the lift-off, none appear without the heart, and its return gives a new first
     reading within ±fine_bpm."""
-    on1, on2 = (augment.add_noise(augment.synthetic_pcg(72, duration_s=8.0, seed=s)[0], FS,
-                                  "white", 25.0, s) for s in (1, 2))
-    off = (np.zeros(10 * FS) if gap == "silence"
-           else augment.noise(gap, 10 * FS, FS, np.random.default_rng(0)))
+    on1, on2 = (augment.channel(augment.add_noise(augment.synthetic_pcg(72, duration_s=8.0,
+                                                                       seed=s)[0], FS, "white",
+                                                  25.0, s), FS, CFG) for s in (1, 2))
+    off = (np.zeros(10 * FS) if gap == "silence" else augment.channel(
+        augment.noise(gap, 10 * FS, FS, np.random.default_rng(0)), FS, CFG))
     off = off * on1.std() / max(off.std(), 1e-9)
     reads = readings(cfg, np.concatenate([on1, off, on2]).astype(np.float32))
     times = np.array([t for t, _, _ in reads])
-    assert not ((times > 8.0 + 6.0) & (times <= 18.0)).any()
+    assert not ((times > 8.0 + 4.0) & (times <= 18.0)).any()
     back = [r for r in reads if r[0] > 18.0]
     assert back and abs(back[0][1] - 72) <= cfg["eval"]["fine_bpm"]
 

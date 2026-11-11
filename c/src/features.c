@@ -250,6 +250,45 @@ float hr_lag_interp(const int16_t *r, uint16_t n, float lag, int *valid)
     return frac == 0.0f ? r_i : (decode(r[i + 1]) - r_i) * frac + r_i;
 }
 
+/* Heartbeats in the latest samples (features.recent_periodicity): highest normalised
+ * correlation of the last stretch of the activation window with itself one period earlier, over
+ * lags within ±HR_RECENT_TOL of period (samples); the stretch is HR_RECENT_N samples, at least one
+ * period plus HR_RECENT_OVERLAP. 0 with too few samples or a flat overlap. */
+float hr_recent_periodicity(const hr_window_t *act, float period)
+{
+    const int size = (int)hr_window_size(HR_WIN, act->count);
+    const int lo_raw = (int)floorf(period * (1.0f - HR_RECENT_TOL));
+    const int lo = lo_raw > 1 ? lo_raw : 1;
+    const int hi = (int)ceilf(period * (1.0f + HR_RECENT_TOL));
+    int n = HR_RECENT_N > hi + HR_RECENT_OVERLAP ? HR_RECENT_N : hi + HR_RECENT_OVERLAP;
+    n = n < size ? n : size;
+    const uint32_t first = act->count - (uint32_t)n;   /* push index of the stretch's first */
+    float best = 0.0f;
+    for (int lag = lo; lag <= hi && lag <= n - HR_RECENT_OVERLAP; lag++) {
+        const int m = n - lag;
+        float mean_a = 0.0f, mean_b = 0.0f;
+        for (int i = 0; i < m; i++) {
+            mean_a += act->hist[(first + (uint32_t)(lag + i)) % HR_WIN];
+            mean_b += act->hist[(first + (uint32_t)i) % HR_WIN];
+        }
+        mean_a /= (float)m;
+        mean_b /= (float)m;
+        float ab = 0.0f, aa = 0.0f, bb = 0.0f;
+        for (int i = 0; i < m; i++) {
+            const float a = act->hist[(first + (uint32_t)(lag + i)) % HR_WIN] - mean_a;
+            const float b = act->hist[(first + (uint32_t)i) % HR_WIN] - mean_b;
+            ab += a * b;
+            aa += a * a;
+            bb += b * b;
+        }
+        if ((aa < bb ? aa : bb) > HR_VAR_FLOOR * (float)m) {
+            const float r = ab / sqrtf(aa * bb);
+            best = r > best ? r : best;
+        }
+    }
+    return best;
+}
+
 /* Activation ACF at a state's period; 0 outside the window (NaN of the reference). */
 float hr_acf_t(const int16_t *acf, uint16_t n, uint16_t state)
 {

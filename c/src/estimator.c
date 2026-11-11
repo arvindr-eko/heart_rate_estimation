@@ -22,6 +22,7 @@ static uint32_t blocks_of(float seconds)
 static void clear(hr_state_t *s)
 {
     hr_frontend_init(&s->fe);
+    hr_quality_init(&s->q);
     hr_net_init(&s->nn);
     for (int i = 0; i < HR_WIN; i++)
         s->act.hist[i] = s->act.sums[i] = 0.0f;
@@ -31,7 +32,7 @@ static void clear(hr_state_t *s)
     s->s1_n = 0;
     hr_tracker_init(s->posterior);
     s->n_blocks = s->first_block = s->last_block = 0;
-    s->absent_frames = 0;
+    s->absent_frames = s->present_frames = 0;
     s->has_reading = 0;
     s->info.t_s = 0.0f;
     s->info.estimate_bpm = s->info.frame_bpm = NAN;
@@ -212,9 +213,13 @@ static int frame(hr_state_t *s, hr_reading_t *out)
     f->p_fine = hr_probability(hr_cal_fine, fine, f->periodicity);
     f->p_rough = hr_probability(hr_cal_rough, rough, f->periodicity);
     const int agree = !isnan(frame_bpm) && fabsf(logf(hr / frame_bpm)) <= HR_EST_TOL_LOG;
-    f->heart_present = (uint8_t)(f->periodicity >= HR_MIN_PERIODICITY
-                                 && f->activation_sd >= HR_MIN_ACTIVATION_SD);
-    const int absent = hr_heart_absent(f);
+    /* presence: block Q, recent heartbeat, learned gate */
+    const float recent = isnan(hr) ? 0.0f : hr_recent_periodicity(&s->act, HR_LAG_TO_BPM / hr);
+    const float hf = hr_quality_high_band(&s->q);
+    const int clean = hf <= HR_HF_MAX, noisy = hf > HR_HF_LOST;
+    const float p_present = hr_presence(f, recent, hf, agree, rough, fine);
+    f->heart_present = (uint8_t)hr_heart_present(f, recent, clean, p_present);
+    const int absent = hr_heart_absent(f, recent, noisy, p_present);
     if (s->has_reading && hr_lost(s, absent)) {
         const hr_frame_info_t ended = *f;
         clear(s);
@@ -222,6 +227,7 @@ static int frame(hr_state_t *s, hr_reading_t *out)
         s->info.phase = HR_PHASE_WARMUP;
         return 0;
     }
+    s->present_frames = f->heart_present ? (uint16_t)(s->present_frames + 1) : 0;
     f->phase = have ? HR_PHASE_SEARCHING : HR_PHASE_WARMUP;
     int emit;
     if (!s->has_reading) {
@@ -257,6 +263,7 @@ int hr_process_block(hr_state_t *s, const int16_t pcm[HR_BLOCK_SAMPLES], hr_read
         float band[HR_NET_IN], x[HR_NET_IN];
         for (int b = 0; b < HR_NET_IN; b++)
             band[b] = env[b][e];
+        hr_quality_update(&s->q, band);
         hr_net_normalise(&s->nn, band, x);
         const float a = hr_net_step(&s->nn, x);
         hr_window_push(s->act.hist, s->act.sums, HR_WIN, &s->act.count, a);

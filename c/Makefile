@@ -9,8 +9,8 @@ M4_CC   ?= clang
 SIZE    ?= $(shell command -v llvm-size || xcrun -f llvm-size 2>/dev/null)
 NM      ?= $(shell command -v llvm-nm || xcrun -f llvm-nm 2>/dev/null)
 GEN     := build/generated
-SRC     := src/frontend.c src/net.c src/features.c src/scorer.c src/tracker.c src/rhythm.c \
-           src/readout.c src/estimator.c
+SRC     := src/frontend.c src/quality.c src/net.c src/features.c src/scorer.c src/tracker.c \
+           src/rhythm.c src/readout.c src/estimator.c
 M4_OBJ  := $(addprefix build/m4/,$(notdir $(SRC:.c=.o))) build/m4/hr_model.o
 HDR     := include/hr.h include/hr_blocks.h $(GEN)/hr_model.h
 SHA256  ?= $(shell command -v sha256sum || echo shasum -a 256)

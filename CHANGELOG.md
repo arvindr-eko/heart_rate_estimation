@@ -22,6 +22,33 @@ key test results; the full documentation of a version is `docs/` at its tag.
 6. Commit, tag `vMAJOR.MINOR.PATCH`, push the branch and the tag
    (`git push origin main vMAJOR.MINOR.PATCH`).
 
+## 1.2.0rc1 (2026-11-11), model hr_v8, presence gate (release candidate, not released)
+Readings only with a heart sound, and a fast stop after lift-off, from field reports of readings
+on finger taps, handling and the device on a table.
+- Block Q (`quality.py`, `quality.c`): ln(E 200-400 Hz / E 25-100 Hz), energy averages over 0.5 s.
+- Recent heartbeat (`features.recent_periodicity`): correlation of the last 1.5 s of the
+  activation with itself one period earlier; below 0.2 after the first reading: no heartbeat.
+- Learned heart-present gate (`readout.presence`, `<weights>_presence.npz`, `hr-estimation train
+  --presence-only`): MLP, 16 hidden units, over periodicity, recent heartbeat, activation SD,
+  agreement, posterior masses, high-band ratio and its product with the periodicity; trained on
+  training-split heart frames, with systolic murmurs added to every second recording, against
+  no-heart clips (taps, rhythmic taps, handling, scratch, friction, speech, breath, room noise,
+  hum) and lift-offs, all through the measured device channel (`augment.channel`). First
+  reading at probability 0.5 for 0.5 s; after it, below 0.3: no heartbeat.
+- Test split against 1.1.0: regular median time to first reading 2.5 to 2.75 s (90th
+  percentile 4.0 s both), first within ±3 BPM 0.877 to 0.888, accurate at 4 s 0.900 to 0.858,
+  MAE 1.36 to 1.27 BPM, irregular coverage 1.000 to 0.996. Stress: median first reading 2.75 to
+  3.75 s, reading by 10 s 0.998 to 0.977, MAE 2.13 to 1.62 BPM.
+- No-heart clips (validation harness, 10 x 20 s per kind, channel-matched): readings 60 to 21
+  (taps), 83 to 42 (handling), 24 to 4 (friction), 22 to 0 (breath), 7 to 0 (room noise), 6 to 0
+  (scratch); rhythmic taps and speech nearby unchanged (known limitation). Lift-off spliced into
+  80 validation recordings: measurement ended for 79-80 of 80 per noise kind, median 2.8-3.8 s
+  after the lift-off (1.1.0: 5.2 s in silence, often not within 8 s with noise).
+- Golden readings regenerated from the test run (1.1.0 copies kept as `*_v1.1.0.json`).
+- Device test (2026-11-11, firmware `h12` side by side with `h8` = 1.1.0): fewer readings on
+  finger taps; still readings at random times while speaking near the device and on knocks and
+  taps on the table. Not released; no tag.
+
 ## 1.1.0 (2026-11-10), model hr_v8
 Memory of the C port within the firmware's limits: state 10 KB, stack 1 KB.
 - Cortex-M4 build: state 13,836 to 9,940 bytes (budget 10,240); stack of the deepest call path

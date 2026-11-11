@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from device import features, frontend, net, readout, rhythm, scorer, tracker
+from device import features, frontend, net, quality, readout, rhythm, scorer, tracker
 
 
 @dataclass
@@ -22,11 +22,13 @@ class EstimatorState:
     """Block states, the scorer model, the calibration and the block counter."""
     cfg: dict
     fe: frontend.FrontendState
+    q: quality.QualityState
     nn: net.NetState
     feat: features.FeatureState
     feat_s1: features.FeatureState          # 25-50 Hz band (S1), decimated by s1_decimation
     model: scorer.ScorerModel | None
     cal: readout.Calibration
+    presence: readout.Presence | None
     trk: tracker.TrackerState
     rd: readout.ReadoutState
     grid: np.ndarray
@@ -45,7 +47,8 @@ def frame_seconds(cfg: dict) -> float:
 def _blocks(cfg: dict, weights: dict | None = None) -> dict:
     """Fresh state of every block (network weights reused when given)."""
     ft = cfg["features"]
-    return {"fe": frontend.init(cfg), "nn": net.init(cfg, weights), "feat": features.init(cfg),
+    return {"fe": frontend.init(cfg), "q": quality.QualityState(), "nn": net.init(cfg, weights),
+            "feat": features.init(cfg),
             "feat_s1": features.init(cfg, ft["s1_window_s"],
                                      cfg["frontend"]["env_rate_hz"] / ft["s1_decimation"]),
             "trk": tracker.init(cfg, frame_seconds(cfg)), "rd": readout.ReadoutState()}
@@ -56,7 +59,8 @@ def init(cfg: dict, keep_trace: bool = False, with_scorer: bool = True) -> Estim
     inputs."""
     model = scorer.load(scorer.weights_path(cfg)) if with_scorer else None
     return EstimatorState(cfg=cfg, model=model, cal=readout.load_calibration(cfg),
-                          grid=features.hr_grid(cfg), keep_trace=keep_trace, **_blocks(cfg))
+                          presence=readout.load_presence(cfg), grid=features.hr_grid(cfg),
+                          keep_trace=keep_trace, **_blocks(cfg))
 
 
 def restart(state: EstimatorState) -> None:
@@ -72,6 +76,7 @@ def feed(state: EstimatorState, block: np.ndarray) -> None:
     and the normalised 25-50 Hz band (S1) averaged over s1_decimation envelope samples."""
     env = frontend.process(state.fe, block)
     for i in range(env.shape[1]):
+        quality.update(state.q, state.cfg, env[:, i])
         x = net.normalise(state.nn, env[:, i])
         features.push(state.feat, np.atleast_1d(net.step(state.nn, x)))
         state.s1_acc.append(x[0])
@@ -114,6 +119,16 @@ def periodicity(state: EstimatorState, feats: np.ndarray | None, hr: float) -> f
     return float(feats[int(np.argmin(np.abs(state.grid - hr))), features.ACF_T])
 
 
+def recent_heartbeat(state: EstimatorState, hr: float) -> float:
+    """Heartbeats in the last decision.recent_s of the activation at the estimate's period
+    (features.recent_periodicity); 0 without an estimate."""
+    if np.isnan(hr):
+        return 0.0
+    dc = state.cfg["decision"]
+    return features.recent_periodicity(state.feat, 60.0 * state.feat.rate_hz / hr, dc["recent_s"],
+                                       dc["recent_tol_rel"], dc["recent_overlap_s"])
+
+
 def activation_sd(state: EstimatorState) -> float:
     """Standard deviation of the activation over the features window: near 0 for silence and
     steady sounds such as mains hum, whose tiny ripple the scale-free periodicity still scores
@@ -136,18 +151,26 @@ def process(state: EstimatorState, block: np.ndarray) -> tuple | None:
     sd = activation_sd(state)
     cv, beat_hr = rhythm.analyse(features.window(state.feat), state.feat.rate_hz, hr, cfg["rhythm"])
     a = readout.assess(cfg, state.cal, state.trk.posterior, state.grid, hr, frame_hr, cv, acf)
-    present = readout.heart_present(cfg, acf, sd)
+    recent = recent_heartbeat(state, hr)
+    hf = quality.high_band(state.q)
+    clean, noisy = hf <= cfg["quality"]["hf_max"], hf > cfg["quality"]["hf_lost"]
+    x = readout.presence_features(acf, recent, sd, hf, a)
+    p_present = readout.presence(state.presence, x)
+    present = readout.heart_present(cfg, acf, sd, recent, clean, p_present)
     if state.keep_trace:
         state.trace.append({"t": t, "hr": hr, "frame_hr": frame_hr, "periodicity": acf,
-                            "activation_sd": sd, "cv": cv, "beat_hr": beat_hr,
+                            "activation_sd": sd, "cv": cv, "beat_hr": beat_hr, "recent": recent,
+                            "hf": hf, "presence_x": x, "p_present": p_present,
                             "heart_present": present, **a})
-    absent = readout.heart_absent(cfg, acf, sd)
+    absent = readout.heart_absent(cfg, acf, sd, recent, noisy, p_present)
     if readout.lost(state.rd, cfg, absent, frame_seconds(cfg)):
         restart(state)
         return None
+    readout.track(state.rd, present)
     if absent and state.rd.first_at is not None:   # no update without heartbeat
         return None
-    due = readout.first_due(cfg, a, acf, sd, hr, t)
+    due = readout.first_due(cfg, a, acf, sd, hr, t, recent, state.rd, frame_seconds(cfg), clean,
+                            p_present)
     return readout.schedule(state.rd, cfg, due, hr, readout.confidence_of(a), t)
 
 

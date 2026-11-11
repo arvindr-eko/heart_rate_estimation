@@ -63,6 +63,12 @@ rhythm:                                    # block R: beats picked from the acti
   refractory_rel: 0.6                      # beats at least this x the estimate's period apart
   min_intervals: 2                         # interval CV and beat-count HR need this many
 
+quality:                                   # block Q, signal quality (10 ms envelope)
+  hf_tau_s: 0.5                            # averaging of the 25-100 Hz and 200-400 Hz energies
+  hf_max: 1.0e+30                          # heart present only with ln(E high / E low) at or
+  hf_lost: 1.0e+30                         # below hf_max; after the first reading, above hf_lost:
+                                           # no heartbeat (1e30: no hard gate, presence gate only)
+
 decision:                                  # block F, internal (re-validate when changed)
   min_s: 1.5                               # no reading before this time
   slow_bpm: 50                             # below: slow path
@@ -78,3 +84,13 @@ decision:                                  # block F, internal (re-validate when
                                            # irregular rhythms stay) or SD below min_activation_sd
   lost_after_s: 2.0                        # this long without heartbeat in a row: the
                                            # measurement restarts by itself
+  recent_s: 1.5                            # recent heartbeat: correlation of the last
+                                           # recent_s (at least one period + recent_overlap_s)
+  recent_overlap_s: 0.5                    # with itself one period earlier,
+  recent_tol_rel: 0.15                     # best lag within ±15 % of the estimate's period
+  recent_min: 0.0                          # heart present (first reading, updates) at or above
+  recent_lost: 0.2                         # after the first reading: below this, no heartbeat
+  confirm_s: 0.5                           # first reading only after this long of heart present
+  presence_min: 0.5                        # learned heart-present gate (readout.presence,
+                                           # <weights>_presence.npz): present at or above this
+  presence_lost: 0.3                       # after the first reading: below this, no heartbeat

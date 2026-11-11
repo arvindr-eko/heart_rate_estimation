@@ -3,6 +3,7 @@
     hr-estimation prepare                             split (created once) and ECG label table
     hr-estimation train [--out NAME] [--scorer-only]  TCN, scorer, calibration: NAME_*.npz
     hr-estimation train --calibrate-only              refit the readout calibration only
+    hr-estimation train --presence-only               fit the heart-present gate only
     hr-estimation evaluate [--split train|val|test] [--stress] [--tag TAG]
     hr-estimation evaluate --data SNAPSHOT_DIR        another snapshot (e.g. unfiltered)
     hr-estimation c-model                             C model files and self-test cases:
@@ -36,6 +37,8 @@ def cmd_train(args: argparse.Namespace, cfg: dict) -> None:
     config.preflight(cfg)
     if args.calibrate_only:
         train.calibrate(cfg)
+    elif args.presence_only:
+        train.fit_presence(cfg)
     else:
         train.run(cfg, args.out, args.scorer_only)
 
@@ -77,6 +80,8 @@ def main() -> None:
     tr.add_argument("--out", default="new", help="model name of the new weights")
     tr.add_argument("--calibrate-only", action="store_true",
                     help="refit the readout calibration of the configured model on validation")
+    tr.add_argument("--presence-only", action="store_true",
+                    help="fit the heart-present gate of the configured model")
     tr.set_defaults(func=cmd_train)
     ev = sub.add_parser("evaluate")
     ev.add_argument("--split", default="val", choices=["train", "val", "test"])
