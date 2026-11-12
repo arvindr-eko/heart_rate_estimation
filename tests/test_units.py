@@ -62,8 +62,9 @@ def test_window_hr():
 
 
 def test_readout_rules(cfg):
-    """Regular path at `confidence`; slow or irregular path not before slow_irregular_after_s;
-    forced reading at latest_s only with enough mass; no reading without periodicity."""
+    """Regular path at `confidence`; slow or irregular path not before slow_irregular_after_s,
+    at slow_irregular_early_confidence until slow_irregular_relaxed_s; forced reading at latest_s
+    only with enough mass; no reading without periodicity."""
     rd, dc, grid = cfg["readout"], cfg["decision"], features.hr_grid(cfg)
     cal = readout.Calibration(fine=np.array([-5.0, 10.0, 0.0]), rough=np.array([-5.0, 10.0, 0.0]))
 
@@ -83,11 +84,20 @@ def test_readout_rules(cfg):
     assert not due(posterior(72, 1), 72, 3.0, acf=0.0)
     assert not due(posterior(72, 1), 72, 3.0, sd=dc["min_activation_sd"] - 0.01)
     assert not due(posterior(72, 8), 72, 3.0)
-    assert not due(posterior(40, 1), 40, rd["slow_irregular_after_s"] - 0.5)
+    assert not due(posterior(40, 1), 40, rd["slow_irregular_after_s"] - 0.25)
     assert due(posterior(40, 1), 40, rd["slow_irregular_after_s"])
-    assert not due(posterior(72, 1), 72, 3.0, cv=0.2)
+    assert not due(posterior(72, 1), 72, rd["slow_irregular_after_s"] - 0.25, cv=0.2)
     assert due(posterior(72, 8), 72, rd["latest_s"])
     assert not due(np.full(grid.size, 1 / grid.size), 72, rd["latest_s"])
+    # slow/irregular: early confidence until slow_irregular_relaxed_s, then the relaxed one
+    a = {"path": "slow_irregular", "rough_mass": 1.0,
+         "p_rough": (dc["slow_irregular_early_confidence"] + dc["slow_irregular_confidence"]) / 2}
+    early_t = rd["slow_irregular_after_s"]
+    assert early_t < dc["slow_irregular_relaxed_s"]
+    assert not readout.first_due(cfg, a, 0.6, 0.2, 40, early_t)
+    assert readout.first_due(cfg, {**a, "p_rough": dc["slow_irregular_early_confidence"]}, 0.6,
+                             0.2, 40, early_t)
+    assert readout.first_due(cfg, a, 0.6, 0.2, 40, dc["slow_irregular_relaxed_s"])
 
 
 def test_heart_presence_and_loss(cfg):

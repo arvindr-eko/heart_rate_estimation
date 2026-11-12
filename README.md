@@ -11,22 +11,22 @@ algorithm; the C port (`c/`) is verified against it.
 <!-- begin:version -->
 | Version | Model | Generated | Commit | Runs |
 |---|---|---|---|---|
-| 1.1.0 | hr_v8 | 2026-11-10 | 15fc04b | val `20261110_150811_hr_v8_val_v1.1.0`, test `20261110_150919_hr_v8_test_v1.1.0`, stress `20261110_151009_hr_v8_test_v1.1.0_stress` |
+| 1.4.0rc1 | hr_v9c | 2026-11-11 | db171e4 | val `20261111_200954_hr_v9c_val_v1.4.0rc1`, test `20261111_201036_hr_v9c_test_v1.4.0rc1`, stress `20261111_201137_hr_v9c_test_v1.4.0rc1_stress` |
 
 Key results, test split (703 recordings with a trusted ECG reference); all results in
 [docs/results.md](docs/results.md):
 
 | Result | Value |
 |---|---|
-| regular, 50-200 BPM: first reading, median / 90 % by | 2.5 s / 4 s |
-| regular: first reading within ±3 BPM; reading within ±3 BPM at 4 s | 87.7 %; 90.0 % |
+| regular, 50-200 BPM: first reading, median / 90 % by | 3 s / 4.25 s |
+| regular: first reading within ±3 BPM; reading within ±3 BPM at 4 s | 89.0 %; 82.2 % |
 | regular: converged (every later reading within ±3 BPM), median | 3 s |
-| slow, < 50 BPM: first reading, median; within ±10 BPM | 4 s; 100.0 % |
-| irregular or AF: first reading within ±10 BPM; within ±3 BPM at 9 s | 76.2 %; 81.3 % |
-| all: half/double readings; with a reading by 10 s | 0.2 %; 99.9 % |
-| targets met (test and stress) | 9 of 14 |
+| slow, < 50 BPM: first reading, median; within ±10 BPM | 4.5 s; 100.0 % |
+| irregular or AF: first reading within ±10 BPM; within ±3 BPM at 9 s | 78.7 %; 79.6 % |
+| all: half/double readings; with a reading by 10 s | 0.3 %; 99.0 % |
+| targets met (test and stress) | 8 of 14 |
 | C port: test recordings with the Python reading times | 825 of 825 |
-| C port, Cortex-M4: RAM of the state; stack, libm included; flash of code and constants without libm | 9,940 bytes (budget 10,240, within); 504 bytes (budget 1,024, within); 14,453 bytes (budget 5,120, exceeded) |
+| C port, Cortex-M4: RAM of the state; stack, libm included; flash of code and constants without libm | 10,020 bytes (budget 10,240, within); 672 bytes (budget 1,024, within); 17,517 bytes (budget 5,120, exceeded) |
 <!-- end:version -->
 
 ## Documents
@@ -50,22 +50,25 @@ Key results, test split (703 recordings with a trusted ECG reference); all resul
 - Input: 200 int16 PCG samples every 50 ms. Output: nothing, or a reading (time, BPM,
   confidence): the first one when the estimate is likely right, then one per second while a
   heartbeat is heard.
-- Regular rhythms at common rates: first reading after 2.5-4 s, aimed at ±3 BPM. Slow
-  (< 50 BPM) or irregular hearts: first reading from 4 s within ±10 BPM, then converging.
-  Silence and mains hum alone: no reading. After the first reading, frames without heartbeat
-  give no new reading, and 2 s of them (stethoscope lifted) end the measurement, which then
-  restarts by itself: the firmware needs no contact detection.
-- Trained parts: a causal network (913 weights) and a per-rate scorer (339 parameters); the rest
-  is fixed signal processing. float32 (the per-frame ACF and NCCF as int16 codes), fixed-size
-  state of 9.9 KB, no look-ahead.
+- Regular rhythms at common rates: first reading after 3-4.25 s, aimed at ±3 BPM. Slow
+  (< 50 BPM) or irregular hearts: first reading from 3 s within ±10 BPM, then converging.
+  Only heart sounds give readings: the network is trained to stay silent on speech, knocks,
+  taps, rubbing and other sounds, and a learned presence gate must hold for 1 s before the first
+  reading. After the first reading, frames without heartbeat give no new reading, and 2 s of
+  them (stethoscope lifted) end the measurement, which then restarts by itself. The input may
+  run before the stethoscope is placed: while no heartbeat is heard the analysis restarts, so a
+  placement starts like a fresh measurement. The firmware needs no contact detection.
+- Trained parts: a causal network (1,009 weights), a per-rate scorer (339 parameters) and a
+  presence gate (MLP, 16 hidden units); the rest is fixed signal processing. float32 (the
+  per-frame ACF and NCCF as int16 codes), fixed-size state of 10.0 KB, no look-ahead.
 - Reference: the ECG of the same recording (R-peak consensus of five detectors on three leads),
   never an algorithm input.
 - Known limitations of this version: the regular group's first reading misses its ±3 BPM target
-  (92 %), irregular rhythms and very fast (sped-up) hearts miss theirs, noise alone (friction,
-  some breath and white noise) can still give a reading and can keep readings going after a
-  lift-off, the data is filtered on signal quality (unfiltered evaluation open), and the C port
-  exceeds the 5 KB flash budget (not yet run on the target: self-test in
-  [docs/realtime_implementation.md](docs/realtime_implementation.md) §4.7).
+  (92 %), irregular rhythms and very fast (sped-up) hearts miss theirs; some non-heart sounds
+  still give readings (held-out clips: speech 10 %, handling 20 %, rhythmic taps 20 %); very
+  faint hearts (−6 dB SNR) read later than without the idle restart; the data is filtered on
+  signal quality (unfiltered evaluation open); the C port exceeds the 5 KB flash budget. Details
+  and the device tests: [CHANGELOG.md](CHANGELOG.md).
 
 ## 2. Quick start
 Environment (run once; Python 3.11):
@@ -83,11 +86,13 @@ both outside git):
 ```bash
 cd heart_rate_estimation
 hr-estimation prepare                            # split (created once) and ECG labels
-hr-estimation train --out hr_v8                  # network, scorer, readout calibration
+hr-estimation prepare --negatives                # non-heart sound clips (docs/data.md §4.1)
+hr-estimation train --out hr_v9                  # network, scorer, calibration, presence gate
 hr-estimation evaluate --split val               # tuning split
 hr-estimation evaluate --split test              # held-out split
 hr-estimation evaluate --split test --stress     # noise and extreme-rate stress set
 hr-estimation evaluate --data <snapshot dir>     # another snapshot, e.g. unfiltered
+hr-estimation noise-eval                         # non-heart sounds, lift-offs, placements
 hr-estimation c-model                            # C model files, self-test cases
 pytest                                           # unit, streaming, corner, golden, C port
 ```
@@ -101,13 +106,13 @@ pytest                                           # unit, streaming, corner, gold
 
 ## 3. Usage example
 ```
-$ hr-estimation evaluate --split test --tag v1.1.0
-15:09:20 FAIL regular_common.first_within_fine: value 0.877, target 0.92
-15:09:20 targets passed 9/12 -> 20261110_150919_hr_v8_test_v1.1.0
+$ hr-estimation evaluate --split test --tag v1.4.0rc1
+20:10:36 FAIL regular_common.first_within_fine: value 0.89, target 0.92
+20:10:36 targets passed 8/12 -> 20261111_201036_hr_v9c_test_v1.4.0rc1
 
 $ cd c && make selftest
-hr_selftest: version 1.1.0, model hr_v8 61a88ea2280e, state 9940 bytes
-  hr72_lift_off  19 readings  PASS
+hr_selftest: version 1.4.0rc1, model hr_v9c a1eb297821a6 gate c70a8b, state 10020 bytes
+  hr72_lift_off  16 readings  PASS
 hr_selftest: PASS
 ```
 
@@ -123,7 +128,7 @@ Runtime settings (`configs/device.yml`, part 1; no retraining):
 | Setting | Effect | Default |
 |---|---|---|
 | `confidence` | Regular hearts: probability the first reading must have of being within ±3 BPM. Lower: sooner and less accurate. | 0.7 |
-| `slow_irregular_after_s` | Slow or irregular hearts: earliest first reading. | 4.0 s |
+| `slow_irregular_after_s` | Slow or irregular hearts: earliest first reading (probability within ±10 BPM of at least 0.97 until 4 s, then 0.9). | 3.0 s |
 | `latest_s` | With a heart sound present: a first reading at this time when the estimate is roughly certain (posterior mass of at least `forced_min_mass` within ±10 BPM). | 8.0 s |
 
 Their effect: [docs/results.md](docs/results.md) §10. Internal constants (rate range, slow
@@ -145,9 +150,10 @@ tests/                      pytest suite
 CHANGELOG.md                versions: what changed, model, key results
 pyproject.toml              package and command; dependencies from requirements.txt
 requirements.txt            pinned packages
-models/                     model files: hr_v8 (network, scorer, readout calibration); models
-                            trained later stay out of git until released
-data/                       recordings (not in git)
+models/                     model files of shipped versions: hr_v8 (1.0-1.2), hr_v9c (1.3-1.4
+                            release candidates); network, scorer, calibration, presence gate;
+                            other models stay out of git
+data/                       recordings and non-heart sound clips (not in git)
 output/                     splits, labels, runs, caches, golden readings (not in git)
 ```
 A run folder `output/runs/<time>_<model>_<split>[_<tag>]/` holds `config.yml`,

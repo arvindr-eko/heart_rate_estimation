@@ -9,7 +9,9 @@
 readout:                       # when the first reading appears; changing these needs no retraining
   confidence: 0.7              # regular hearts: how sure before the first reading (probability of
                                # being within ±3 BPM, measured on validation); lower: sooner
-  slow_irregular_after_s: 4.0  # slow or irregular hearts: first reading not before this time
+  slow_irregular_after_s: 3.0  # slow or irregular hearts: first reading not before this time
+                               # (decision.slow_irregular_early_confidence until
+                               # decision.slow_irregular_relaxed_s, then slow_irregular_confidence)
   latest_s: 8.0                # heart sound present: a first reading at this time when the
                                # estimate is roughly certain (decision.forced_min_mass)
 
@@ -80,6 +82,8 @@ decision:                                  # block F, internal (re-validate when
   slow_bpm: 50                             # below: slow path
   regular_max_cv: 0.10                     # picked-beat interval CV at or above: irregular path
   slow_irregular_confidence: 0.9           # slow/irregular path: probability within ±10 BPM
+  slow_irregular_early_confidence: 0.97    # slow/irregular path before slow_irregular_relaxed_s:
+  slow_irregular_relaxed_s: 4.0            # this probability within ±10 BPM is needed
   conf_fine_bpm: 4.0                       # confidence of a regular reading: mass within ±4 BPM
   conf_rough_bpm: 10.0                     # slow/irregular reading and forced reading: ±10 BPM
   forced_min_mass: 0.3                     # forced reading at latest_s only above this mass
@@ -90,6 +94,10 @@ decision:                                  # block F, internal (re-validate when
                                            # irregular rhythms stay) or SD below min_activation_sd
   lost_after_s: 2.0                        # this long without heartbeat in a row: the
                                            # measurement restarts by itself
+  idle_s: 2.0                              # before the first reading: this long with the
+  idle_activation: 0.4                     # activation below this (no heartbeat), the analysis
+                                           # restarts every frame until it rises (front end
+                                           # and network keep running)
   recent_s: 1.5                            # recent heartbeat: correlation of the last
                                            # recent_s (at least one period + recent_overlap_s)
   recent_overlap_s: 0.5                    # with itself one period earlier,

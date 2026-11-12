@@ -163,6 +163,13 @@ noise_eval:                                # hr-estimation noise-eval (evaluatio
   swap_min_delta_bpm: 15.0                 # reference HR differs by at least this
   overlap_kinds: ["real:speech", "real:voice", "real:impact"]  # added to the whole recording
   overlap_snr_db: [10.0, 0.0]              # in the 25-400 Hz band
+  place_kinds:                             # placement with the estimator running: off-chest
+    none: null                             # sound and its level (x the recording SD) for
+    quiet: [white, 0.05]                   # place_after_s, then the recording; none: fresh
+    room: [white, 1.0]                     # start
+    handling: [handling, 2.0]
+    speech: ["real:speech", 1.0]
+  place_after_s: 10.0
   seed: 23
 
 eval:

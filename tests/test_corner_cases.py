@@ -154,6 +154,22 @@ def test_lift_off_stops_and_restarts(cfg, gap):
     assert back and abs(back[0][1] - 72) <= cfg["eval"]["fine_bpm"]
 
 
+@pytest.mark.parametrize("kind", ["silence", "white"])
+def test_placement_while_running(cfg, kind):
+    """Estimator running on 10 s of off-chest sound (silence or room noise), then the heart:
+    first reading no more than one frame after a fresh start's, within ±fine_bpm (the analysis
+    restarts while no heartbeat is heard)."""
+    heart = noisy(72)
+    off = (np.zeros(10 * FS) if kind == "silence" else augment.channel(
+        augment.noise(kind, 10 * FS, FS, np.random.default_rng(0)), FS, CFG))
+    off = off * heart.std() / max(off.std(), 1e-9)
+    fresh = readings(cfg, heart)[0]
+    placed = [r for r in readings(cfg, np.concatenate([off, heart]).astype(np.float32))
+              if r[0] > 10.0][0]
+    assert placed[0] - 10.0 <= fresh[0] + 0.25
+    assert abs(placed[1] - 72) <= cfg["eval"]["fine_bpm"]
+
+
 @pytest.mark.parametrize("snr_db", [10.0, 0.0])
 def test_mains_hum(cfg, snr_db):
     """50/60 Hz hum and harmonics: within ±fine_bpm by latest_s."""

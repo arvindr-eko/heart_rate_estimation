@@ -7,7 +7,11 @@ tracker (E), rhythm (R) and readout (F). A reading is (t_s, bpm, confidence), re
 slots only (module readout); None otherwise. After the first reading, readings pause while a
 frame has no heartbeat (readout.heart_absent; the reading on show stays), and after
 decision.lost_after_s without heartbeat the measurement restarts by itself (restart): readings
-stop until the next first reading. restart (or init) also starts a new measurement on request.
+stop until the next first reading. Before the first reading, after decision.idle_s with the
+activation below decision.idle_activation (no heartbeat, e.g. off the chest with the input
+running), the analysis restarts every frame until the activation rises (restart_analysis: blocks
+C-F and the clock; front end and network keep running), so a placement starts the analysis as
+a fresh start does. init starts a new measurement on request (C: hr_init, hr_reset).
 """
 
 from dataclasses import dataclass, field
@@ -36,6 +40,8 @@ class EstimatorState:
     trace: list = field(default_factory=list)
     keep_trace: bool = False
     s1_acc: list = field(default_factory=list)  # S1-band values awaiting decimation
+    quiet_samples: int = 0                      # activation samples in a row below
+                                                # idle_activation (kept across restarts)
 
 
 def frame_seconds(cfg: dict) -> float:
@@ -71,14 +77,33 @@ def restart(state: EstimatorState) -> None:
     state.s1_acc = []
 
 
+def restart_analysis(state: EstimatorState) -> None:
+    """Restart blocks C-F and the measurement clock; front end, quality and network keep their
+    state (no start-up transient, running mean at the input level)."""
+    fresh = _blocks(state.cfg, state.nn.weights)
+    for name in ("feat", "feat_s1", "trk", "rd"):
+        setattr(state, name, fresh[name])
+    state.n_blocks = 0
+    state.s1_acc = []
+
+
+def idle_samples(cfg: dict) -> int:
+    """decision.idle_s in activation samples."""
+    return int(round(cfg["decision"]["idle_s"] * cfg["frontend"]["env_rate_hz"]))
+
+
 def feed(state: EstimatorState, block: np.ndarray) -> None:
-    """Blocks A-B for one input block, and the per-sample update of block C: the activation,
-    and the normalised 25-50 Hz band (S1) averaged over s1_decimation envelope samples."""
+    """Blocks A-B for one input block, and the per-sample update of block C: the activation
+    (and the count of quiet samples), and the normalised 25-50 Hz band (S1) averaged over
+    s1_decimation envelope samples."""
     env = frontend.process(state.fe, block)
+    idle_act = np.float32(state.cfg["decision"]["idle_activation"])
     for i in range(env.shape[1]):
         quality.update(state.q, state.cfg, env[:, i])
         x = net.normalise(state.nn, env[:, i])
-        features.push(state.feat, np.atleast_1d(net.step(state.nn, x)))
+        act = np.float32(net.step(state.nn, x))
+        state.quiet_samples = state.quiet_samples + 1 if act < idle_act else 0
+        features.push(state.feat, np.atleast_1d(act))
         state.s1_acc.append(x[0])
         if len(state.s1_acc) == state.cfg["features"]["s1_decimation"]:
             features.push(state.feat_s1, np.array([np.mean(state.s1_acc)], np.float32))
@@ -171,7 +196,10 @@ def process(state: EstimatorState, block: np.ndarray) -> tuple | None:
         return None
     due = readout.first_due(cfg, a, acf, sd, hr, t, recent, state.rd, frame_seconds(cfg), clean,
                             p_present)
-    return readout.schedule(state.rd, cfg, due, hr, readout.confidence_of(a), t)
+    reading = readout.schedule(state.rd, cfg, due, hr, readout.confidence_of(a), t)
+    if state.rd.first_at is None and state.quiet_samples >= idle_samples(cfg):
+        restart_analysis(state)     # no heartbeat yet: the analysis starts again
+    return reading
 
 
 def run(cfg: dict, audio: np.ndarray, keep_trace: bool = False,

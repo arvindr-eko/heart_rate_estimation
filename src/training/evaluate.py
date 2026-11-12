@@ -460,13 +460,36 @@ def run(cfg: dict, split: str, stress: bool = False, tag: str = "",
 
 # No-heart evaluation (hr-estimation noise-eval): evaluation negatives only
 
+def placement_audio(cfg: dict, name: str, kind: str, seed: int) -> np.ndarray:
+    """A recording after place_after_s of off-chest sound (noise_eval.place_kinds: kind and
+    level x the recording SD); the recording alone for a fresh start (no kind)."""
+    ne, fs = cfg["noise_eval"], cfg["stream"]["fs_hz"]
+    audio = data.load_wav(cfg, name)
+    spec = ne["place_kinds"][kind]
+    if spec is None:
+        return audio
+    off = augment.background(cfg, spec[0], int(ne["place_after_s"] * fs),
+                             np.random.default_rng(seed), "eval")
+    off = off / max(float(off.std()), 1e-12) * float(audio.std()) * spec[1]
+    return np.concatenate([off, audio]).astype(np.float32)
+
+
+def place_offset(cfg: dict, kind: str) -> float:
+    """Placement time (s) of a placement case."""
+    ne = cfg["noise_eval"]
+    return 0.0 if ne["place_kinds"][kind] is None else ne["place_after_s"]
+
+
 def _noise_one(cfg: dict, task: tuple) -> dict:
     """Readings and restart times of one case: ("clip", kind, seed) a no-heart clip; ("lift",
     file, kind, seed) a lift-off spliced into a recording; ("swap", file, file) the first
     recording to swap_at_s, then the second (another heart rate); ("overlap", file, kind,
-    snr_db, seed) a recording with the sound added throughout."""
+    snr_db, seed) a recording with the sound added throughout; ("place", file, kind, seed) a
+    placement after off-chest sound (placement_audio)."""
     ne, fs = cfg["noise_eval"], cfg["stream"]["fs_hz"]
-    if task[0] == "clip":
+    if task[0] == "place":
+        audio = placement_audio(cfg, *task[1:])
+    elif task[0] == "clip":
         audio = augment.no_heart_clip(cfg, task[1], int(ne["clip_s"] * fs),
                                       np.random.default_rng(task[2]), split="eval")
     elif task[0] == "lift":
@@ -539,6 +562,19 @@ def _overlap_case(cfg: dict, res: dict, beats: np.ndarray, duration_s: float) ->
             "off": int(sum(e > cfg["eval"]["rough_bpm"] for e in errs if np.isfinite(e)))}
 
 
+def _place_case(cfg: dict, res: dict, beats: np.ndarray, place_s: float) -> dict:
+    """One placement: time from the placement to the first reading after it, that reading's
+    error against the ECG (same seconds of the recording), readings before the placement."""
+    lc = cfg["labels"]
+    after = [(t, bpm) for t, bpm, _ in res["readings"] if t > place_s + 1e-9]
+    err = np.nan
+    if after:
+        err = abs(after[0][1] - labels.window_hr(beats, after[0][0] - place_s, lc["window_s"],
+                                                 lc["min_intervals"]))
+    return {"first_s": after[0][0] - place_s if after else np.inf, "err_bpm": err,
+            "before": len(res["readings"]) - len(after)}
+
+
 def _q(values: list, q: float) -> float:
     """Quantile of the finite values (NaN without any)."""
     v = np.asarray(values, float)
@@ -546,14 +582,47 @@ def _q(values: list, q: float) -> float:
     return float(np.quantile(v, q)) if v.size else np.nan
 
 
+def _noise_records(cfg: dict) -> pd.DataFrame:
+    """Validation recordings of the noise evaluation: trusted ECG, beats heard, seeded sample."""
+    ne = cfg["noise_eval"]
+    df = data.load_split(cfg, "val")
+    df = df[df["ecg_trusted"] & ~df["unheard"]]
+    return df.sample(n=min(ne["records"], len(df)), random_state=ne["seed"])
+
+
+def _export_one(cfg: dict, task: tuple) -> dict:
+    """Write one placement case as int16 PCM (<out>/pcm/<name>.s16); its manifest row with the
+    Python reference readings on the same int16 input."""
+    out, name, file, kind, seed, ref = task
+    pcm = c_port.to_pcm(placement_audio(cfg, file, kind, seed))
+    (out / "pcm" / f"{name}.s16").write_bytes(pcm.tobytes())
+    readings, _ = estimator.run(cfg, pcm.astype(np.float32) / 32768.0)
+    return {"name": name, "ref_bpm": float(ref), "pre": kind,
+            "place_s": place_offset(cfg, kind), "python_readings": readings}
+
+
+def export_placement(cfg: dict, out: Path) -> int:
+    """Placement cases of the noise evaluation (same recordings, kinds, levels and seeds) as
+    int16 PCM and manifest.json (name, ref_bpm, pre, place_s, python_readings: input time s,
+    BPM, confidence) for a firmware bench; return the number of cases. The PCM holds
+    patient-derived audio: keep it out of version control and delete it after use."""
+    ne = cfg["noise_eval"]
+    df = _noise_records(cfg)
+    (out / "pcm").mkdir(parents=True, exist_ok=True)
+    seed = ne["seed"] * 1000
+    tasks = [(out, f"rec{j:03d}_{k}", f, k, seed + j, ref) for k in ne["place_kinds"]
+             for j, (f, ref) in enumerate(zip(df["output_filename"], df["reference_bpm"]))]
+    rows = data.map_records(cfg, _export_one, tasks, "export")
+    (out / "manifest.json").write_text(json.dumps(rows, default=float))
+    return len(rows)
+
+
 def noise_run(cfg: dict, tag: str = "") -> tuple[Path, dict]:
     """No-heart clips per kind, lift-offs, swaps to another heart and overlaps on validation
     recordings (trusted ECG, beats heard), all with evaluation negatives; write summary.json and
     run_info.json to a run folder; return it and the summary."""
     ne = cfg["noise_eval"]
-    df = data.load_split(cfg, "val")
-    df = df[df["ecg_trusted"] & ~df["unheard"]]
-    df = df.sample(n=min(ne["records"], len(df)), random_state=ne["seed"])
+    df = _noise_records(cfg)
     beats = labels.build_beats(cfg, df)
     names = list(df["output_filename"])
     seed = ne["seed"] * 1000
@@ -564,10 +633,14 @@ def noise_run(cfg: dict, tag: str = "") -> tuple[Path, dict]:
               if abs(hr[a] - hr[b]) >= ne["swap_min_delta_bpm"]]
     tasks += [("overlap", f, k, snr, seed + j) for k in ne["overlap_kinds"]
               for snr in ne["overlap_snr_db"] for j, f in enumerate(names)]
+    tasks += [("place", f, k, seed + j) for k in ne["place_kinds"] for j, f in enumerate(names)]
     results = data.map_records(cfg, _noise_one, tasks, "noise-eval")
-    summary: dict = {"clips": {}, "lift": {}, "swap": [], "overlap": {}}
+    summary: dict = {"clips": {}, "lift": {}, "swap": [], "overlap": {}, "place": {}}
     for task, res in zip(tasks, results):
-        if task[0] == "clip":
+        if task[0] == "place":
+            summary["place"].setdefault(task[2], []).append(
+                _place_case(cfg, res, beats[task[1]]["beats"], place_offset(cfg, task[2])))
+        elif task[0] == "clip":
             c = summary["clips"].setdefault(task[1], {"n": 0, "with_reading": 0, "readings": 0})
             c["n"] += 1
             c["with_reading"] += bool(res["readings"])
@@ -602,6 +675,15 @@ def noise_run(cfg: dict, tag: str = "") -> tuple[Path, dict]:
                               "off_readings": sum(c["off"] for c in v),
                               "recordings_with_off": sum(c["off"] > 0 for c in v)}
                           for k, v in summary["overlap"].items()}
+    fine = cfg["eval"]["fine_bpm"]
+    summary["place"] = {k: {"n": len(v),
+                            "first_median_s": float(np.quantile([c["first_s"] for c in v], 0.5)),
+                            "first_p90_s": float(np.quantile([c["first_s"] for c in v], 0.9)),
+                            "within_4s": float(np.mean([c["first_s"] <= 4.0 for c in v])),
+                            "within_5s": float(np.mean([c["first_s"] <= 5.0 for c in v])),
+                            "first_within_fine": float(np.mean([c["err_bpm"] <= fine for c in v])),
+                            "cases_reading_before": sum(c["before"] > 0 for c in v)}
+                        for k, v in summary["place"].items()}
     out = new_run(cfg, "noise", tag)
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=float))
     info = {"run_id": out.name, "weights": cfg["weights"], "tag": tag, "n_cases": len(tasks),

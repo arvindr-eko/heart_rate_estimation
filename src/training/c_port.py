@@ -115,8 +115,8 @@ def to_pcm(audio: np.ndarray) -> np.ndarray:
 
 
 def restart_times(cfg: dict, trace: list) -> list[float]:
-    """Input times (s) at which the estimator restarted the measurement: the trace's measurement
-    time falls back."""
+    """Input times (s) at which the estimator restarted the measurement or, before a first
+    reading, began an idle episode (restart_analysis): the trace's measurement time falls back."""
     frame_s = estimator.frame_seconds(cfg)
     return [(i + 1) * frame_s for i in range(len(trace) - 1) if trace[i + 1]["t"] < trace[i]["t"]]
 
@@ -138,10 +138,11 @@ def record(cfg: dict, pcm: np.ndarray) -> dict:
         band = frontend.process(fe, piece)
         env.append(band)
         act.append(net.process(nn, band)[0])
+        est_fe = state.fe
         reading = estimator.process(state, piece)
         if reading is not None:
             readings.append(((start + block) / cfg["stream"]["fs_hz"], *reading[1:]))
-        if state.n_blocks == 0:          # restart: the estimator's front end and TCN are new
+        if state.fe is not est_fe:       # full restart: the estimator's front end and TCN are new
             fe, nn = frontend.init(cfg), net.init(cfg)
         if state.n_blocks % cfg["stream"]["frame_blocks"] == 0:
             f = estimator.scorer_input(state)

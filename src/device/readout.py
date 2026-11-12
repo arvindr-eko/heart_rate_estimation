@@ -18,6 +18,7 @@ mains hum):
              periodicity) reaches confidence.
   slow/irr.  due from slow_irregular_after_s when the probability of being within ±10 BPM (from
              the mass within ±conf_rough_bpm and the periodicity) reaches
+             slow_irregular_early_confidence, from slow_irregular_relaxed_s on
              slow_irregular_confidence.
   forced     due at latest_s when the mass within ±conf_rough_bpm reaches forced_min_mass.
 A reading is (t_s, bpm, confidence), the confidence being the calibrated probability for the
@@ -207,8 +208,11 @@ def first_due(cfg: dict, a: dict, periodicity: float, activation_sd: float, hr: 
         return a["rough_mass"] >= dc["forced_min_mass"]
     if a["path"] == "regular":
         return a["agree"] and a["p_fine"] >= rd["confidence"]
-    return (t + 1e-9 >= rd["slow_irregular_after_s"]
-            and a["p_rough"] >= dc["slow_irregular_confidence"])
+    if t + 1e-9 < rd["slow_irregular_after_s"]:
+        return False
+    early = t + 1e-9 < dc["slow_irregular_relaxed_s"]
+    return a["p_rough"] >= dc["slow_irregular_early_confidence" if early
+                              else "slow_irregular_confidence"]
 
 
 def schedule(state: ReadoutState, cfg: dict, due: bool, hr: float, confidence: float,

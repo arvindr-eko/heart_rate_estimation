@@ -22,6 +22,70 @@ key test results; the full documentation of a version is `docs/` at its tag.
 6. Commit, tag `vMAJOR.MINOR.PATCH`, push the branch and the tag
    (`git push origin main vMAJOR.MINOR.PATCH`).
 
+## 1.4.0rc1 (2026-11-11), model hr_v9c, faster first reading with the input running (release candidate, device-tested)
+From the 1.3.0rc1 device test: no readings on clicks or speech, but the first reading after 6-7 s
+on the screen. Firmware bench (coral-fw, placement after 10 s of off-chest sound with the
+estimator running, as on the device): first reading 4.80 s after the placement (1.2.0rc1:
+2.55 s; fresh start 4.05 s for both). The network outputs about 0 on off-chest sound, so at the
+placement the 4 s analysis window held no beats and the presence gate stayed below 0.05 for 3 s.
+Same model; C API unchanged.
+- Idle restart (`estimator.py`, `estimator.c`): before the first reading, after `idle_s` (2 s)
+  with the beat activation below `idle_activation` (0.4), the analysis (features, tracker,
+  readout, measurement clock) restarts every frame until the activation rises; front end and
+  network keep running. A placement then starts the analysis as a fresh start does.
+- Earlier slow/irregular reading (`readout.first_due`, `hr_first_due`): `slow_irregular_after_s`
+  4.0 to 3.0 s, with a probability within ±10 BPM of at least
+  `decision.slow_irregular_early_confidence` (0.97) until `slow_irregular_relaxed_s` (4 s), 0.9
+  from then on as before. The setting remains the earliest slow/irregular first reading.
+- `hr-estimation noise-eval`: placement cases (10 s of quiet sound at 0.05x, room noise at 1x,
+  handling at 2x or speech at 1x the recording SD before the recording; and fresh starts);
+  `noise-eval --export DIR` writes them as int16 PCM with the Python readings for a firmware
+  bench (patient audio: delete after use).
+- Placement (validation, the tuning split; 60 recordings of any rhythm), 1.3.0rc1 to 1.4.0rc1:
+  after room noise median 4.75 to 3.25 s, first reading by 4 s 0.08 to 0.63; after quiet sound
+  4.75 to 4.00 s, 0.15 to 0.63; 90th percentile after room noise 6.03 to 5.83 s, after quiet
+  sound 6.05 to 6.55 s; after handling (5.0 s) or speech (4.25 s) unchanged; fresh start median
+  4.0 to 3.25 s.
+- No-heart clips, share with any reading: rubbing 0.20 to 0.05, handling 0.45 to 0.20, rhythmic
+  taps 0.30 to 0.20, synthetic taps 0.10 to 0, voice 0.05 to 0, music 0.05 to 0; speech 0.10 and
+  alarms 0.05 unchanged.
+- Test split against 1.3.0rc1 (fresh starts): regular median time to first reading 3.0 s and
+  90th percentile 4.25 s unchanged, first within ±3 BPM 0.893 to 0.890, MAE 1.36 BPM both,
+  irregular first within ±10 BPM 0.783 to 0.787. Stress: median first reading 4.0 to 3.0 s,
+  MAE 1.90 BPM and reading by 10 s 0.937 both.
+- C port: state 10,020 bytes and stack unchanged (the idle counter uses padding); code and
+  constants 17,371 to 17,529 bytes. Python and C: identical reading times on the synthetic cases
+  and the 825 test recordings (one reading 0.47 BPM apart, as in 1.3.0rc1). Golden readings
+  regenerated from the test run (1.3.0rc1 copies kept as `*_v1.3.0rc1.json`).
+- Documentation: README, `docs/` tables, figures and tutorial regenerated from the 1.4.0rc1
+  runs; integration guide §4.4-4.5 (show a reading when it is returned; continuous input).
+- Experiments (validation and noise-eval; runs `*_hr_v9c_*_sia*`, `*_er*`, `*_st*`, `*_ia*`,
+  `*_lj*`, `*_noidle`):
+  - slow/irregular rule: from 3.0 s at 0.9 (median 3.75 to 3.0 s, first within ±3 BPM 0.898 to
+    0.874), 3.0 s at 0.95 or 0.97 alone (90th percentile 4.25 to 5.0-5.5 s), 2.5 s at 0.95
+    (median 2.5 s, 0.878); chosen: 3.0 s at 0.97 plus 4 s at 0.9 (median 3.0 s, 0.890);
+  - idle restart variants: full restart including front end and network (placement median
+    4.0-4.25 s), analysis only (3.25-4.0 s, chosen), restarting the running mean too (worse);
+    `idle_activation` 0.3 against 0.4 (0.4: placement median after room noise 0.25 s sooner,
+    one clip fewer with a reading for rubbing, alarms and handling);
+  - not adopted: restarting the input normalisation on a level jump at the placement (placement
+    90th percentile 6.6 to 5.1 s, but readings on rhythmic taps 0.20 to 0.45); a shorter
+    confirmation at presence 0.9 (at most 0.25 s sooner, MAE +0.04 BPM).
+- Known limitations (code review and measurements):
+  - very faint hearts (synthetic, −6 dB SNR): first reading median 8.0 s, 6.5 s without the idle
+    restart (all within ±3 BPM); none at −3 dB or more. `idle_activation` 0.3 removes the delay;
+    0.4 kept as device-tested;
+  - many regular hearts start on the slow/irregular path: the picked-beat interval CV on the
+    hr_v9c activation exceeds 0.10 (synthetic 72 BPM: until 3 s, while `p_fine` is 0.85 at
+    2 s); better beat picking would give them the regular path sooner;
+  - placement after quiet sound: 90th percentile 6.55 s (level step into the running mean);
+  - voicing: in the fourth 10 ms interval of each block, lags up to 10 ms pair forward and longer
+    ones backward (the same in Python, C and training; to be fixed with the next retraining);
+    the lag-segment energy is recomputed per lag (a running update would save about a third of
+    the voicing work).
+- Device test (2026-11-11, firmware `h14`): first reading sooner than with h13, but later than
+  offline; finger taps can still give readings. Tag `v1.4.0rc1`; not released.
+
 ## 1.3.0rc1 (2026-11-11), model hr_v9c, beat detector trained against other sounds (release candidate, not released)
 No beat activation on speech, knocks and other sounds near the device, from the 1.2.0rc1 device
 test. C API unchanged.

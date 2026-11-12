@@ -92,6 +92,8 @@ typedef struct {
     uint16_t absent_frames;         /* frames in a row without a heartbeat (after the first
                                        reading) */
     uint16_t present_frames;        /* frames in a row with a heart present */
+    uint16_t quiet_samples;         /* activation samples in a row below HR_IDLE_ACTIVATION
+                                       (saturated; kept across restarts) */
     uint8_t s1_n;
     uint8_t has_reading;
     hr_scratch_t scratch;

@@ -3,7 +3,9 @@
  * windows' per-sample updates (C). Every HR_FRAME_BLOCKS blocks: lag functions and features
  * (C), scores (D), tracker (E), gates, rhythm (R) and readout (F). After the first reading,
  * readings pause in frames without heartbeat, and the measurement restarts when the heartbeat
- * is lost (hr_lost). */
+ * is lost (hr_lost). Before the first reading, after HR_IDLE_SAMPLES activation samples below
+ * HR_IDLE_ACTIVATION, the analysis (blocks C-F, clock) restarts every frame until the
+ * activation rises; front end, quality and network keep running. */
 #include <math.h>
 
 #include "hr.h"
@@ -18,12 +20,9 @@ static uint32_t blocks_of(float seconds)
     return (uint32_t)ceilf(seconds * ((float)HR_FS_HZ / (float)HR_BLOCK_SAMPLES) - BLOCK_ROUNDING);
 }
 
-/* Clear every block state and the readout; the settings are kept. */
-static void clear(hr_state_t *s)
+/* Clear blocks C-F, the clock and the readout; front end, quality and network are kept. */
+static void clear_analysis(hr_state_t *s)
 {
-    hr_frontend_init(&s->fe);
-    hr_quality_init(&s->q);
-    hr_net_init(&s->nn);
     for (int i = 0; i < HR_WIN; i++)
         s->act.hist[i] = s->act.sums[i] = 0.0f;
     for (int i = 0; i < HR_S1_WIN; i++)
@@ -44,6 +43,15 @@ static void clear(hr_state_t *s)
 #ifdef HR_DEBUG
     s->dbg_has_features = 0;
 #endif
+}
+
+/* Clear every block state and the readout; the settings are kept. */
+static void clear(hr_state_t *s)
+{
+    hr_frontend_init(&s->fe);
+    hr_quality_init(&s->q);
+    hr_net_init(&s->nn);
+    clear_analysis(s);
 }
 
 /* Runtime settings of configs/device.yml. */
@@ -85,6 +93,7 @@ hr_result_t hr_init(hr_state_t *s, const hr_settings_t *settings)
     if (hr_set_settings(s, settings ? settings : &defaults) != HR_OK)
         return HR_ERR_ARG;
     clear(s);
+    s->quiet_samples = 0;
     return HR_OK;
 }
 
@@ -92,6 +101,7 @@ hr_result_t hr_init(hr_state_t *s, const hr_settings_t *settings)
 void hr_reset(hr_state_t *s)
 {
     clear(s);
+    s->quiet_samples = 0;
 }
 
 /* Standard deviation of the activation window (two passes). */
@@ -239,6 +249,14 @@ static int frame(hr_state_t *s, hr_reading_t *out)
     } else {
         emit = !absent && s->n_blocks >= s->last_block + HR_OUTPUT_BLOCKS;
     }
+    if (!s->has_reading && s->quiet_samples >= HR_IDLE_SAMPLES) {
+        /* no heartbeat yet: the analysis starts again */
+        const hr_frame_info_t ended = *f;
+        clear_analysis(s);
+        s->info = ended;
+        s->info.phase = HR_PHASE_WARMUP;
+        return 0;
+    }
     if (s->has_reading)
         f->phase = HR_PHASE_READING;
     if (!emit)
@@ -270,6 +288,10 @@ int hr_process_block(hr_state_t *s, const int16_t pcm[HR_BLOCK_SAMPLES], hr_read
         hr_quality_update(&s->q, band);
         hr_net_normalise(&s->nn, band, x);
         const float a = hr_net_step(&s->nn, x);
+        if (a >= HR_IDLE_ACTIVATION)
+            s->quiet_samples = 0;
+        else if (s->quiet_samples < UINT16_MAX)
+            s->quiet_samples++;
         hr_window_push(s->act.hist, s->act.sums, HR_WIN, &s->act.count, a);
         /* 25-50 Hz band (normalised) averaged over HR_S1_DECIMATION envelope samples */
         s->s1_pending[s->s1_n++] = x[0];

@@ -7,7 +7,10 @@
     hr-estimation train --presence-only               fit the heart-present gate only
     hr-estimation evaluate [--split train|val|test] [--stress] [--tag TAG]
     hr-estimation evaluate --data SNAPSHOT_DIR        another snapshot (e.g. unfiltered)
-    hr-estimation noise-eval [--tag TAG]              no-heart clips, lift-offs, swaps, overlaps
+    hr-estimation noise-eval [--tag TAG]              no-heart clips, lift-offs, swaps, overlaps,
+                                                      placements with the estimator running
+    hr-estimation noise-eval --export DIR             placement cases as int16 PCM + manifest
+                                                      (firmware bench; patient audio)
     hr-estimation c-model                             C model files and self-test cases:
                                                       c/build/generated/
 
@@ -71,6 +74,10 @@ def cmd_evaluate(args: argparse.Namespace, cfg: dict) -> None:
 def cmd_noise_eval(args: argparse.Namespace, cfg: dict) -> None:
     """No-heart evaluation with the evaluation negatives; log the run folder."""
     config.preflight(cfg, need_negatives=True)
+    if args.export:
+        n = evaluate.export_placement(cfg, Path(args.export))
+        log.info("placement cases: %d -> %s", n, args.export)
+        return
     out, _ = evaluate.noise_run(cfg, args.tag)
     log.info("noise-eval -> %s", out.name)
 
@@ -124,6 +131,7 @@ def main() -> None:
     ev.set_defaults(func=cmd_evaluate)
     ne = sub.add_parser("noise-eval")
     ne.add_argument("--tag", default="", help="suffix of the run folder name")
+    ne.add_argument("--export", help="write the placement cases to this folder instead")
     ne.set_defaults(func=cmd_noise_eval)
     cm = sub.add_parser("c-model")
     cm.set_defaults(func=cmd_c_model)

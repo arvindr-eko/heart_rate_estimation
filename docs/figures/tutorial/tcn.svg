@@ -15,8 +15,8 @@
 .layer {font-size: 11px; fill: #0b0b0b}
 </style></defs>
 <rect width="1200" height="590" fill="#ffffff"/>
-<rect x="20" y="424" width="360" height="32" rx="5" fill="#ffffff" stroke="#52514e" stroke-width="1.3"/><text x="32" y="444" class="layer">Input: normalised bands (4,) per 10 ms</text>
-<rect x="20" y="362" width="360" height="32" rx="5" fill="#fdeee6" stroke="#eb6834" stroke-width="1.3"/><text x="32" y="382" class="layer">Layer 0: conv, 3 taps 1 apart, 4→8, ReLU</text>
+<rect x="20" y="424" width="360" height="32" rx="5" fill="#ffffff" stroke="#52514e" stroke-width="1.3"/><text x="32" y="444" class="layer">Input: front-end values (8,) per 10 ms</text>
+<rect x="20" y="362" width="360" height="32" rx="5" fill="#fdeee6" stroke="#eb6834" stroke-width="1.3"/><text x="32" y="382" class="layer">Layer 0: conv, 3 taps 1 apart, 8→8, ReLU</text>
 <rect x="20" y="300" width="360" height="32" rx="5" fill="#fdeee6" stroke="#eb6834" stroke-width="1.3"/><text x="32" y="320" class="layer">Layer 1: conv, 3 taps 2 apart, 8→8, ReLU, + input</text>
 <rect x="20" y="238" width="360" height="32" rx="5" fill="#fdeee6" stroke="#eb6834" stroke-width="1.3"/><text x="32" y="258" class="layer">Layer 2: conv, 3 taps 4 apart, 8→8, ReLU, + input</text>
 <rect x="20" y="176" width="360" height="32" rx="5" fill="#fdeee6" stroke="#eb6834" stroke-width="1.3"/><text x="32" y="196" class="layer">Layer 3: conv, 3 taps 8 apart, 8→8, ReLU, + input</text>

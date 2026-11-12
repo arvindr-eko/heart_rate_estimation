@@ -27,19 +27,19 @@
 <text x="80.0" y="159" class="ref">§3</text>
 <rect x="210" y="80" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
 <text x="295.0" y="99" class="title">A Front end</text>
-<text x="295.0" y="117" class="sub">4 band-pass filters</text>
-<text x="295.0" y="131" class="sub">5 pieces of 40 samples</text>
-<text x="295.0" y="145" class="sub">mean energy, log</text>
-<text x="295.0" y="159" class="ref">§4.1</text>
+<text x="295.0" y="117" class="sub">6 band-pass filters</text>
+<text x="295.0" y="131" class="sub">log energy per 10 ms</text>
+<text x="295.0" y="145" class="sub">+ voicing, impulsive-</text>
+<text x="295.0" y="159" class="sub">ness  §4.1</text>
 <rect x="450" y="80" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
 <text x="535.0" y="99" class="title">B1 Normalise</text>
 <text x="535.0" y="117" class="sub">5 columns, one by one:</text>
-<text x="535.0" y="131" class="sub">value − 1 s running</text>
-<text x="535.0" y="145" class="sub">mean, per band</text>
+<text x="535.0" y="131" class="sub">heart bands − 1 s</text>
+<text x="535.0" y="145" class="sub">running mean</text>
 <text x="535.0" y="159" class="ref">§4.2</text>
 <rect x="690" y="80" width="170" height="108" rx="6" fill="#fdeee6" stroke="#eb6834" stroke-width="1.6"/>
 <text x="775.0" y="99" class="title">B2 TCN</text>
-<text x="775.0" y="117" class="sub">per 10 ms: (4,) in, () out</text>
+<text x="775.0" y="117" class="sub">per 10 ms: (8,) in, () out</text>
 <text x="775.0" y="131" class="sub">5 causal conv layers</text>
 <text x="775.0" y="145" class="sub">sees last 0.63 s</text>
 <text x="775.0" y="159" class="ref">§4.3</text>
@@ -59,10 +59,10 @@
 <text x="174" y="104" class="shape" text-anchor="middle">(200,)</text>
 <text x="174" y="117" class="shape" text-anchor="middle">per block</text>
 <polyline points="380,126 448,126" class="wire" marker-end="url(#arrow)"/>
-<text x="414" y="104" class="shape" text-anchor="middle">(4, 5)</text>
+<text x="414" y="104" class="shape" text-anchor="middle">(8, 5)</text>
 <text x="414" y="117" class="shape" text-anchor="middle">per block</text>
 <polyline points="620,126 688,126" class="wire" marker-end="url(#arrow)"/>
-<text x="654" y="104" class="shape" text-anchor="middle">(4,) x 5</text>
+<text x="654" y="104" class="shape" text-anchor="middle">(8,) x 5</text>
 <text x="654" y="117" class="shape" text-anchor="middle">per block</text>
 <circle cx="655" cy="126" r="3.5" fill="#52514e"/>
 <polyline points="655,126 655,304 688,304" class="wire" marker-end="url(#arrow)"/>
@@ -97,7 +97,7 @@
 <text x="635.0" y="571" class="ref">§4.8</text>
 <rect x="880" y="492" width="170" height="108" rx="6" fill="#eaf2fc" stroke="#2a78d6" stroke-width="1.6"/>
 <text x="965.0" y="511" class="title">F Readout</text>
-<text x="965.0" y="529" class="sub">gates: time, ACF, SD</text>
+<text x="965.0" y="529" class="sub">gates: ACF, SD, presence</text>
 <text x="965.0" y="543" class="sub">path: regular / slow</text>
 <text x="965.0" y="557" class="sub">p ≥ threshold → due</text>
 <text x="965.0" y="571" class="ref">§4.10</text>

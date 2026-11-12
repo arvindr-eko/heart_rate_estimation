@@ -96,6 +96,8 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_RECENT_N": int(round(dc["recent_s"] * env_rate)),
         "HR_RECENT_OVERLAP": int(round(dc["recent_overlap_s"] * env_rate)),
         "HR_CONFIRM_FRAMES": readout.frames_of(dc["confirm_s"], estimator.frame_seconds(cfg)),
+        "HR_IDLE_SAMPLES": estimator.idle_samples(cfg),
+        "HR_SLOW_IRREGULAR_RELAXED_BLOCKS": _blocks(cfg, dc["slow_irregular_relaxed_s"]),
         "HR_PRESENCE_ENABLED": int(presence is not None),
         "HR_PRESENCE_N": len(readout.PRESENCE_FEATURES),
         "HR_PRESENCE_HIDDEN": presence.w1.shape[1] if presence is not None else 0}
@@ -116,6 +118,8 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_REFRACTORY_REL": cfg["rhythm"]["refractory_rel"],
         "HR_SLOW_BPM": dc["slow_bpm"], "HR_REGULAR_MAX_CV": dc["regular_max_cv"],
         "HR_SLOW_IRREGULAR_CONFIDENCE": dc["slow_irregular_confidence"],
+        "HR_SLOW_IRREGULAR_EARLY_CONFIDENCE": dc["slow_irregular_early_confidence"],
+        "HR_IDLE_ACTIVATION": dc["idle_activation"],
         "HR_CONF_FINE_BPM": dc["conf_fine_bpm"], "HR_CONF_ROUGH_BPM": dc["conf_rough_bpm"],
         "HR_FORCED_MIN_MASS": dc["forced_min_mass"], "HR_MIN_PERIODICITY": dc["min_periodicity"],
         "HR_MIN_ACTIVATION_SD": dc["min_activation_sd"], "HR_MIN_S": dc["min_s"],

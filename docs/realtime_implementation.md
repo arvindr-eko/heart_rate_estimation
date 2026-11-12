@@ -36,29 +36,32 @@ for start in range(0, audio.size - block + 1, block):
         print("t %.2f s  %.1f BPM  confidence %.2f" % reading)
 ```
 ```
-t 2.00 s  71.8 BPM  confidence 0.84
-t 3.00 s  71.3 BPM  confidence 0.96
+t 3.25 s  71.5 BPM  confidence 0.98
+t 4.25 s  71.8 BPM  confidence 0.98
 ...
-t 10.00 s  72.8 BPM  confidence 0.98
+t 9.25 s  72.6 BPM  confidence 0.98
 ```
 
 | Module | Block | Called | In → out | State |
 |---|---|---|---|---|
 | `estimator.py` | all | `init(cfg)`; `process(state, block)` every 50 ms; `run(cfg, audio)` for a whole recording | 200 samples → reading `(t_s, bpm, confidence)` or `None` | all block states, block counter |
-| `frontend.py` | A | `process(state, block)` per block | 200 samples → (4, 5) log energies | 4 bands x 2 biquads x 2 values |
-| `net.py` | B | `normalise(state, frame)`, `step(state, x)` per 10 ms | 4 log energies → activation in [0, 1] | running mean (4), one delay line per layer |
+| `frontend.py` | A | `process(state, block)` per block | 200 samples → (8, 5): 4 heart-band log energies, 2 upper-band ratios, voicing, impulsiveness | 6 bands x 2 biquads x 2 values |
+| `quality.py` | Q | `update(state, cfg, frame)` per 10 ms | band values → 200-400 Hz / 25-100 Hz energy ratio | two energy averages |
+| `net.py` | B | `normalise(state, frame)`, `step(state, x)` per 10 ms | 8 front-end values → activation in [0, 1] | running mean (4 heart bands), one delay line per layer |
 | `features.py` | C | `push(state, x)` per sample; `compute(state)` per frame; `hr_grid(cfg)` | activation or 25-50 Hz band → (232, 13) per frame | ring buffer and lag sums: 400 (activation), 100 (S1 band) |
 | `scorer.py` | D | `log_emission(model, feats)` per frame | (232, 17) → log-likelihood (232) | weights only |
 | `tracker.py` | E | `update(state, log_emission)`, `estimate(state)` per frame | (232) → posterior (232), HR | posterior (232) |
 | `rhythm.py` | R | `analyse(window, rate_hz, hr, cfg)` per frame | 4 s of activation → interval CV, beat-count HR | none |
-| `readout.py` | F | `assess`, `first_due`, `schedule`, `lost` per frame | posterior, HR, gates, CV → reading or none; loss of the heartbeat | times of the first and the latest reading, frames without heartbeat |
+| `readout.py` | F | `assess`, `presence`, `first_due`, `schedule`, `lost` per frame | posterior, HR, gates, presence, CV → reading or none; loss of the heartbeat | times of the first and the latest reading, frames with and without heartbeat |
 
 `estimator.process` runs A, B and the per-sample update of C on every block; every fifth block
 also `scorer_input` (C: 13 activation features, 3 S1-band features, flag), D, E, the two gate
 values (`periodicity`, `activation_sd`), R and F. After the first reading, frames without
 heartbeat (`readout.heart_absent`) give no new reading, and `lost_after_s` (2 s) of them end the
 measurement (`readout.lost`, then `estimator.restart`): readings stop until the next first
-reading (§4.5).
+reading (§4.5). Before the first reading, `idle_s` (2 s) with the activation below
+`idle_activation` restart the analysis every frame (`estimator.restart_analysis`; front end
+and network keep running).
 
 ## 2. Tools (`src/training/`)
 Everything around the device code: data, ECG labels, training, evaluation and tools; runs on a
@@ -70,11 +73,13 @@ workstation or SageMaker, never on the stethoscope. One command, `hr-estimation`
 | Step | Command | Modules | Writes |
 |---|---|---|---|
 | 1. Split and labels | `hr-estimation prepare` | `data` (split by clinician account, once), `labels` (ECG R-peak consensus) | `output/splits/split_v1.csv`, `output/labels/ecg_labels.csv` |
-| 2. Train | `hr-estimation train --out NAME` | `train`, `augment`; scorer inputs streamed through `device` | `models/NAME_tcn.npz`, `_scorer.npz`, `_calibration.npz` |
+| 1b. Non-heart sounds | `hr-estimation prepare --negatives` | `data` (LibriSpeech, FSD50K; [data.md](data.md) §4.1) | `data/negatives/manifest.csv`, `clips/` |
+| 2. Train | `hr-estimation train --out NAME` | `train`, `augment`; scorer inputs streamed through `device` | `models/NAME_tcn.npz`, `_scorer.npz`, `_calibration.npz`, `_presence.npz` |
 | 3. Select the model | `weights: NAME` in `configs/device.yml`, or `--weights NAME` per command | | |
 | 4. Tune on validation | `hr-estimation evaluate --split val` | `evaluate` (every recording streamed through `device.estimator`) | `output/runs/<time>_NAME_val/` |
 | 5. Test, once per candidate | `hr-estimation evaluate --split test`, then with `--stress` | `evaluate`, `augment` (stress conditions) | `output/runs/<time>_NAME_test[_stress]/` |
 | 6. Other snapshot | `hr-estimation evaluate --data <dir>` | `labels.external`, `evaluate` | `output/runs/<time>_NAME_ext_<dir>/` |
+| 6b. Non-heart sounds | `hr-estimation noise-eval`; `--export DIR` writes the placement cases for a firmware bench | `evaluate`, `augment` (evaluation part of the negatives) | `output/runs/<time>_NAME_noise/summary.json` |
 | 7. Golden readings | copy the test run's `readings.json` to `output/golden/NAME_test_readings.json` | read by `tests/test_regression.py` | |
 | 8. C port files | `hr-estimation c-model` (or `make model` in `c/`) | `c_model`, `c_port` (self-test cases) | `c/build/generated/`: model files, self-test cases |
 
@@ -89,11 +94,11 @@ What a change needs:
 | Module | Role |
 |---|---|
 | `config.py` | Loads and merges the two configs, resolves paths, preflight checks, software version |
-| `data.py` | Manifest, grouped split by clinician account, WAV loading, parallel map over recordings |
+| `data.py` | Manifest, grouped split by clinician account, WAV loading, parallel map over recordings, non-heart sound manifest |
 | `labels.py` | ECG R-peaks (five NeuroKit2 detectors, three leads), reference HR per reading, other snapshots |
-| `augment.py` | Synthetic PCG, noise at a set SNR, time warping and speed-up (training and stress) |
-| `train.py` | Network (PyTorch, exported to numpy), scorer, readout calibration |
-| `evaluate.py` | Streaming evaluation, grading per group, targets, stress protocol, figures, run folder |
+| `augment.py` | Synthetic PCG, noise at a set SNR (synthetic and recorded), device channel, time warping and speed-up (training and stress), no-heart clips and lift-offs |
+| `train.py` | Network (PyTorch, exported to numpy; teacher distillation, non-heart clips), scorer, readout calibration, presence gate |
+| `evaluate.py` | Streaming evaluation, grading per group, targets, stress protocol, figures, run folder; non-heart, lift-off, swap, overlap and placement evaluation |
 | `c_model.py` | C sizes, coefficients and weights from the config and the model files |
 | `c_port.py` | Synthetic test signals; every block's output of the Python reference and of the C port (through ctypes) and their comparison; self-test cases (`write_selftest`) |
 | `cli.py` | The `hr-estimation` command |
@@ -108,6 +113,7 @@ not in git, they hold the weights).
 | Python (`src/device/`) | C (`c/src/`) |
 |---|---|
 | `frontend.py` | `frontend.c` |
+| `quality.py` | `quality.c` |
 | `net.py` | `net.c` |
 | `features.py` | `features.c` |
 | `scorer.py` | `scorer.c` |
@@ -183,7 +189,7 @@ self-test first.
 |---|---|
 | `include/hr.h` | API; the only header the firmware includes |
 | `include/hr_blocks.h` | state layout and block functions, included by `hr.h` (fields private) |
-| `src/*.c` (8 files) | the estimator |
+| `src/*.c` (9 files) | the estimator |
 | `generated/hr_model.h`, `generated/hr_model.c` | sizes, coefficients and weights of this version |
 | `tools/hr_selftest.c`, `generated/hr_selftest_cases.h` | self-test (§4.7); test firmware only |
 | `tools/hr_run.c` | host tool: a raw PCM file through the C port; readings, time per call |
@@ -235,7 +241,9 @@ stack); not yet with the product toolchain or on the target (§4.7).
 
 ### 4.4 Output and display
 `hr_process_block` returns 1 when a reading is due; `hr_get_frame_info` gives the phase of the
-measurement. The latest reading is shown only in phase `HR_PHASE_READING`:
+measurement. The latest reading is shown only in phase `HR_PHASE_READING`, and as soon as
+`hr_process_block` returns it: a display refreshed on a fixed tick instead adds up to one tick
+(0.5 s on average with a 1 s tick) to the time to the first reading.
 
 | Phase | When | Display |
 |---|---|---|
@@ -311,9 +319,10 @@ void hr_push_samples(const int16_t *x, uint32_t n)
 Time to the first reading per rhythm: README key results and [results.md](results.md).
 
 ### 4.5 Contact handling
-- No reading without heart sounds: silence and mains hum alone give none (tested); noise alone
-  (friction, some breath and white noise) can still give one (known limitation,
-  [results.md](results.md) §11).
+- No reading without heart sounds: silence and mains hum alone give none (tested); the network
+  is trained to stay silent on other sounds, and a learned presence gate must hold for 1 s
+  before the first reading. Some sounds can still give one (held-out clips: speech 10 %,
+  handling 20 %, rhythmic taps 20 %; `hr-estimation noise-eval`, CHANGELOG 1.4.0rc1).
 - After the first reading, a frame without heartbeat has the periodicity of the activation at
   the estimate below `lost_periodicity` (0.15) or its standard deviation (SD) below
   `min_activation_sd` (0.03). Such frames give no new reading (the latest one stays on show).
@@ -326,6 +335,14 @@ Time to the first reading per rhythm: README key results and [results.md](result
 - The analysis window (4 s) holds heartbeats for a while after a lift-off, so the last reading
   comes some seconds after it (table). Firmware that detects contact itself can call `hr_reset`
   when contact is lost to end the readings at once.
+- Continuous input (since 1.4.0): the estimator may run before the stethoscope is placed. Before
+  the first reading, after `idle_s` (2 s) with the beat activation below `idle_activation`
+  (0.4), the analysis (features, tracker, readout, measurement clock) restarts every frame until
+  the activation rises; front end and network keep running. A placement therefore starts the
+  analysis as a fresh start does, without `hr_reset` or contact detection in the firmware.
+  `hr_reset` is still needed after a gap in the input (§4.3). Placement test:
+  `hr-estimation noise-eval` (placement section) and `noise-eval --export DIR` (int16 cases
+  and Python readings for a firmware bench).
 - `heart_present` (frame info) is 1 while a frame passes the first-reading gates (periodicity
   ≥ 0.2, activation SD ≥ 0.03), e.g. for a weak-signal hint.
 
@@ -335,11 +352,11 @@ Synthetic: 8 s of a 72 BPM heart, 10 s of silence or noise at the level of the h
 
 | Gap | Measurement ended in the gap | Last reading after the lift-off, median / largest | Largest error of the readings after the lift-off (BPM) | Cases with readings without the heart | First reading after the return, median | Largest error of that reading (BPM) |
 |---|---|---|---|---|---|---|
-| silence | 1 of 1 | 3 s / 3 s | 0.3 | 0 | 3.25 s | 1.2 |
-| white | 10 of 10 | 3 s / 6.25 s | 12.3 | 0 | 2 s | 0.8 |
-| breath | 10 of 10 | 3 s / 4.25 s | 10.1 | 0 | 2.25 s | 0.8 |
-| friction | 7 of 10 | 3 s / 5 s | 4.3 | 3 | 0.75 s | 29.1 |
-| hum | 10 of 10 | 3 s / 3 s | 1.8 | 0 | 2 s | 0.6 |
+| silence | 1 of 1 | 0.75 s / 0.75 s | 0.5 | 0 | 5 s | 0.6 |
+| white | 10 of 10 | 0.75 s / 2.75 s | 0.8 | 0 | 2.625 s | 0.7 |
+| breath | 10 of 10 | 0.75 s / 2.75 s | 1.3 | 0 | 2.875 s | 1.3 |
+| friction | 10 of 10 | 0.75 s / 0.75 s | 0.5 | 0 | 4.5 s | 1.4 |
+| hum | 10 of 10 | 0.75 s / 2.5 s | 1.4 | 0 | 2.5 s | 1.3 |
 <!-- end:contact -->
 
 Readings without the heart come from noise passing for heartbeats (friction); they can go on
@@ -430,33 +447,33 @@ self-test (§4.7).
 <!-- begin:c_port -->
 | Case | Band log energy | Activation | Features | Log-likelihood | Posterior | Estimate (BPM) | Binary-feature flips | Readings (Python / C) | Same times | Same heart-present flags |
 |---|---|---|---|---|---|---|---|---|---|---|
-| hr72 | 5.8e-04 | 5.5e-06 | 1.1e-04 | 9.8e-04 | 2.7e-05 | 1.4e-04 | 0 | 8 / 8 | yes | yes |
-| hr45_slow | 5.5e-04 | 9.2e-06 | 1.2e-04 | 7.4e-04 | 8.1e-06 | 5.7e-05 | 0 | 7 / 7 | yes | yes |
-| hr150 | 5.4e-04 | 8.6e-06 | 8.0e-05 | 6.8e-04 | 2.3e-05 | 2.1e-04 | 0 | 9 / 9 | yes | yes |
-| hr250_fast | 5.2e-04 | 7.2e-06 | 9.5e-05 | 1.2e-03 | 2.6e-05 | 3.7e-04 | 0 | 7 / 7 | yes | yes |
-| hr110_loud_s2 | 3.9e-04 | 8.2e-06 | 1.6e-04 | 7.7e-04 | 2.9e-05 | 4.3e-04 | 0 | 7 / 7 | yes | yes |
-| hr80_irregular | 4.7e-04 | 7.4e-06 | 1.4e-04 | 6.7e-04 | 2.6e-05 | 1.7e-04 | 0 | 8 / 8 | yes | yes |
+| hr72 | 5.8e-04 | 2.1e-05 | 1.0e-04 | 5.5e-04 | 2.0e-05 | 1.1e-04 | 0 | 8 / 8 | yes | yes |
+| hr45_slow | 5.5e-04 | 2.0e-05 | 6.2e-05 | 6.6e-04 | 1.7e-05 | 5.7e-05 | 0 | 6 / 6 | yes | yes |
+| hr150 | 5.4e-04 | 4.1e-05 | 1.3e-04 | 5.9e-04 | 1.5e-05 | 2.1e-04 | 0 | 8 / 8 | yes | yes |
+| hr250_fast | 5.2e-04 | 1.3e-05 | 2.0e-04 | 1.1e-03 | 3.6e-05 | 3.5e-04 | 0 | 7 / 7 | yes | yes |
+| hr110_loud_s2 | 3.9e-04 | 1.5e-05 | 7.5e-05 | 6.3e-04 | 1.9e-05 | 3.2e-04 | 0 | 7 / 7 | yes | yes |
+| hr80_irregular | 4.7e-04 | 1.1e-05 | 2.2e-04 | 7.1e-04 | 1.2e-05 | 1.7e-04 | 1 | 2 / 2 | yes | yes |
 | silence | 0.0e+00 | 6.0e-08 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
-| hum_only | 3.5e-05 | 1.8e-06 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
-| hr72_lift_off | 5.8e-04 | 1.0e-05 | not compared | not compared | not compared | not compared | - | 19 / 19 | yes | yes |
-| hr72_silent_gap | 5.8e-04 | 8.6e-06 | not compared | not compared | not compared | not compared | - | 19 / 19 | yes | yes |
+| hum_only | 3.5e-05 | 5.0e-06 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
+| hr72_lift_off | 5.8e-04 | 2.3e-05 | not compared | not compared | not compared | not compared | - | 16 / 16 | yes | yes |
+| hr72_silent_gap | 5.8e-04 | 2.1e-05 | not compared | not compared | not compared | not compared | - | 16 / 16 | yes | yes |
 
 | Measure | Value |
 |---|---|
 | test recordings with identical reading times | 825 of 825 |
-| readings compared | 11897 |
-| BPM difference, median / 99th percentile / largest | 1.3e-04 / 6.5e-03 / 0.104 |
-| confidence difference, 99th percentile / largest | 6.8e-04 / 0.007 |
+| readings compared | 11413 |
+| BPM difference, median / 99th percentile / largest | 1.4e-04 / 4.1e-03 / 0.468 |
+| confidence difference, 99th percentile / largest | 8.8e-04 / 0.014 |
 
 Long session: 30 min of a synthetic 72 BPM heart with white noise at 20 dB SNR, through both
 implementations.
 
 | Measure | Value |
 |---|---|
-| readings; C reading times identical | 1797; yes |
-| largest difference C against Python: BPM / confidence | 1.3e-03 / 3.4e-05 |
+| readings; C reading times identical | 1798; yes |
+| largest difference C against Python: BPM / confidence | 4.0e-03 / 1.6e-05 |
 | restarts of the measurement | 0 |
-| mean absolute error against 72 BPM: first / last 5 min | 0.52 / 0.59 BPM |
+| mean absolute error against 72 BPM: first / last 5 min | 0.53 / 0.58 BPM |
 | lag sums: largest difference from a float64 computation, relative to lag 0 | 2.3e-05 |
 <!-- end:c_port -->
 
@@ -466,19 +483,20 @@ Measured on the C build (`make -C c m4`):
 
 | Measure (Cortex-M4, -Os) | Bytes |
 |---|---|
-| code: estimator.c | 2275 |
-| code: features.c | 2696 |
-| code: frontend.c | 448 |
-| code: net.c | 652 |
-| code: readout.c | 434 |
+| code: estimator.c | 2491 |
+| code: features.c | 3216 |
+| code: frontend.c | 960 |
+| code: net.c | 624 |
+| code: quality.c | 252 |
+| code: readout.c | 874 |
 | code: rhythm.c | 788 |
 | code: scorer.c | 312 |
 | code: tracker.c | 660 |
-| code, total | 8265 |
-| constants: float32 coefficients and weights (hr_model.c) | 6188 |
-| flash, total without libm | 14453 |
-| RAM: state (hr_state_t) | 9940 |
-| RAM: stack, deepest call path (hr_process_block → hr_net_step → __aeabi_memcpy4) | 504 |
+| code, total | 10177 |
+| constants: float32 coefficients and weights (hr_model.c) | 7340 |
+| flash, total without libm | 17517 |
+| RAM: state (hr_state_t) | 10020 |
+| RAM: stack, deepest call path (hr_process_block → hr_frontend_process → __aeabi_memclr4) | 672 |
 
 Budget (`training/c_port.py`): state 10240 bytes, stack 1024 bytes (each libm or compiler-runtime
 call counted as 32 bytes, newlib's expf and logf measured), flash 5120 bytes, CPU 30 M cycles/s on
@@ -490,8 +508,8 @@ Cortex-M4 cycles):
 
 | Call (host, -O2) | Mean (µs) | Largest (µs) |
 |---|---|---|
-| ordinary block | 4.6 | 19.0 |
-| frame block | 24.2 | 43.0 |
+| ordinary block | 9.8 | 30.0 |
+| frame block | 29.2 | 47.0 |
 <!-- end:resources -->
 
 ## 7. Parameters
@@ -501,15 +519,20 @@ Cortex-M4 cycles):
 | Section | Setting | Value | Meaning |
 |---|---|---|---|
 | readout | confidence | `0.7` | regular hearts: how sure before the first reading (probability of being within ±3 BPM, measured on validation); lower: sooner |
-| readout | slow_irregular_after_s | `4.0` | slow or irregular hearts: first reading not before this time |
+| readout | slow_irregular_after_s | `3.0` | slow or irregular hearts: first reading not before this time (decision.slow_irregular_early_confidence until decision.slow_irregular_relaxed_s, then slow_irregular_confidence) |
 | readout | latest_s | `8.0` | heart sound present: a first reading at this time when the estimate is roughly certain (decision.forced_min_mass) |
 | stream | fs_hz | `4000` | PCG sample rate |
 | stream | block_samples | `200` | 50 ms per input block |
 | stream | frame_blocks | `5` | tracker update every 5 blocks = 0.25 s |
 | stream | output_period_s | `1.0` | one reading per second after the first |
-| frontend | bands_hz | `[[25, 50], [50, 100], [100, 200], [200, 400]]` | band-pass edges |
+| frontend | bands_hz | `[[25, 50], [50, 100], [100, 200], [200, 400], [400, 800], [800, 1600]]` | band-passes |
+| frontend | heart_bands | `4` | first bands (25-400 Hz): log energy, running mean removed; bands above: ln(E band / E heart bands) |
 | frontend | filter_order | `2` | Butterworth order per band edge |
-| frontend | env_rate_hz | `100` | log energy every 10 ms |
+| frontend | env_rate_hz | `100` | one value per input every 10 ms |
+| frontend | source_features | `true` | voicing and impulsiveness as TCN inputs |
+| frontend | voicing_from_hz | `100` | source signal: sum of the bands from here up |
+| frontend | voicing_lag_ms | `[2.5, 12.0]` | voicing: highest NCCF over these lags (83-400 Hz pitch) |
+| frontend | impulse_window_ms | `1.0` | impulsiveness: ln(peak energy over this / mean), 10 ms |
 | net | norm_tau_s | `1.0` | running-mean time constant of the input |
 | net | channels | `8` | channels of every layer |
 | net | kernel | `3` | taps per causal convolution |
@@ -536,6 +559,8 @@ Cortex-M4 cycles):
 | decision | slow_bpm | `50` | below: slow path |
 | decision | regular_max_cv | `0.10` | picked-beat interval CV at or above: irregular path |
 | decision | slow_irregular_confidence | `0.9` | slow/irregular path: probability within ±10 BPM |
+| decision | slow_irregular_early_confidence | `0.97` | slow/irregular path before slow_irregular_relaxed_s: |
+| decision | slow_irregular_relaxed_s | `4.0` | this probability within ±10 BPM is needed |
 | decision | conf_fine_bpm | `4.0` | confidence of a regular reading: mass within ±4 BPM |
 | decision | conf_rough_bpm | `10.0` | slow/irregular reading and forced reading: ±10 BPM |
 | decision | forced_min_mass | `0.3` | forced reading at latest_s only above this mass |
@@ -543,4 +568,14 @@ Cortex-M4 cycles):
 | decision | min_activation_sd | `0.03` | no reading below this activation SD (silence, hum) |
 | decision | lost_periodicity | `0.15` | after the first reading, a frame without heartbeat: ACF below this (lower than min_periodicity, so irregular rhythms stay) or SD below min_activation_sd |
 | decision | lost_after_s | `2.0` | this long without heartbeat in a row: the measurement restarts by itself |
+| decision | idle_s | `2.0` | before the first reading: this long with the |
+| decision | idle_activation | `0.4` | activation below this (no heartbeat), the analysis restarts every frame until it rises (front end and network keep running) |
+| decision | recent_s | `1.5` | recent heartbeat: correlation of the last recent_s (at least one period + recent_overlap_s) |
+| decision | recent_overlap_s | `0.5` | with itself one period earlier, |
+| decision | recent_tol_rel | `0.15` | best lag within ±15 % of the estimate's period |
+| decision | recent_min | `0.0` | heart present (first reading, updates) at or above |
+| decision | recent_lost | `0.2` | after the first reading: below this, no heartbeat |
+| decision | confirm_s | `1.0` | first reading only after this long of heart present |
+| decision | presence_min | `0.6` | learned heart-present gate (readout.presence, <weights>_presence.npz): present at or above this |
+| decision | presence_lost | `0.3` | after the first reading: below this, no heartbeat |
 <!-- end:device_parameters -->
