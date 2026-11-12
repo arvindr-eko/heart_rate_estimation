@@ -65,9 +65,27 @@ Key results, test split (703 recordings with a trusted ECG reference); all resul
   never an algorithm input.
 - Known limitations of this version: the regular group's first reading misses its ±3 BPM target
   (92 %), irregular rhythms and very fast (sped-up) hearts miss theirs; some non-heart sounds
-  still give readings (held-out clips: speech 15 %, voice 10 %, rhythmic finger taps 30 %); the
-  data is filtered on signal quality (unfiltered evaluation open); the C port exceeds the 5 KB
-  flash budget. Details and the device tests: [CHANGELOG.md](CHANGELOG.md).
+  still give readings (held-out clips: speech 5 %, voice 10 %, rhythmic finger taps 25 %);
+  regular hearts often start on the slow/irregular path (the beat picker alternates between the
+  activation's two pulses per beat), which delays their first reading; all training recordings
+  are from DUO3, while Coral feeds the estimator after its noise canceller; the data is filtered
+  on signal quality (unfiltered evaluation open); the C port exceeds the 5 KB flash budget.
+  Details and the device tests: [CHANGELOG.md](CHANGELOG.md).
+
+### What changed from h14 to h15
+Device builds: h14 = 1.4.0rc1 (`main`), h15 = 1.5.0rc1, h15b = 1.5.0rc2 (branch
+`exp/tap_rejection`). Test split unless noted; details in [CHANGELOG.md](CHANGELOG.md).
+- Finger taps: the network now trains on taps of many shapes and rates (ring 20-250 Hz, with
+  and without click and press pulse, 40-160 per min) and on synthetic hearts with S1 and S2, so
+  a pair of sounds marks a beat and a single tap does not. Rhythmic taps with a reading: 81 % to
+  33 % of 300 varied tap clips.
+- Faint hearts (synthetic, −6 dB SNR): median first reading 8.0 to 4.0 s.
+- Accuracy (h15b): MAE 1.36 to 1.28 BPM; regular first reading within ±3 BPM 0.890 to 0.888;
+  irregular within ±5 BPM 0.694 to 0.681.
+- Speed (h15b): regular first reading median 3.0 to 2.75 s, 90th percentile 4.25 s both; slow
+  hearts later (median 4.5 to 5.25 s).
+- Same C code, state (10,020 bytes), stack, flash and cycles: only the weights and one readout
+  constant (slow or irregular first reading at probability 0.95 from 4 s) changed.
 
 ## 2. Quick start
 Environment (run once; Python 3.11):
@@ -86,7 +104,8 @@ both outside git):
 cd heart_rate_estimation
 hr-estimation prepare                            # split (created once) and ECG labels
 hr-estimation prepare --negatives                # non-heart sound clips (docs/data.md §4.1)
-hr-estimation train --out hr_v9                  # network, scorer, calibration, presence gate
+hr-estimation train --out hr_v10c                # network, scorer, readout calibration
+hr-estimation train --presence-only --weights hr_v10c   # presence gate
 hr-estimation evaluate --split val               # tuning split
 hr-estimation evaluate --split test              # held-out split
 hr-estimation evaluate --split test --stress     # noise and extreme-rate stress set
@@ -105,13 +124,13 @@ pytest                                           # unit, streaming, corner, gold
 
 ## 3. Usage example
 ```
-$ hr-estimation evaluate --split test --tag v1.4.0rc1
-20:10:36 FAIL regular_common.first_within_fine: value 0.89, target 0.92
-20:10:36 targets passed 8/12 -> 20261111_201036_hr_v9c_test_v1.4.0rc1
+$ hr-estimation evaluate --split test --tag v1.5.0rc2
+11:24:09 FAIL regular_common.first_within_fine: value 0.888, target 0.92
+11:24:09 targets passed 6/12 -> 20261112_112408_hr_v10c_test_v1.5.0rc2
 
 $ cd c && make selftest
-hr_selftest: version 1.4.0rc1, model hr_v9c a1eb297821a6 gate c70a8b, state 10020 bytes
-  hr72_lift_off  16 readings  PASS
+hr_selftest: version 1.5.0rc2, model hr_v10c 243cbe5b6b8b gate 865f4d, state 10020 bytes
+  hr72_lift_off  14 readings  PASS
 hr_selftest: PASS
 ```
 

@@ -39,6 +39,12 @@ unchanged.
 - Tried on validation: waiting until 3.5 s for slow or irregular readings, or a regular
   confidence of 0.8: no gain in first-reading accuracy.
 - Golden readings from the test run (1.5.0rc1 copies kept as `*_v1.5.0rc1.json`).
+- Known limitation: the hr_v10c activation pulses twice per beat (after S1 and after S2); the
+  beat picker alternates between them, so regular hearts read as irregular (synthetic 72 BPM:
+  CV 0.25 at 4 s) and take the slower slow/irregular path. Picking one beat per cycle (e.g.
+  smoothing the activation over the systolic interval first) is the next speed fix.
+- Documentation: README (what changed from h14 to h15), tutorial worked examples, integration
+  guide outputs updated to 1.5.0rc2.
 
 ## 1.5.0rc1 (2026-11-12), model hr_v10c, beat detector trained against finger taps (release candidate, device test pending)
 From the 1.4.0rc1 device test: finger taps still gave readings. With taps more varied than the

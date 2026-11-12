@@ -408,7 +408,7 @@ stack the 232 rows ────────────────────�
 The lag axis becomes the rate axis here: a curve over lags `(n,)` is read at 232 lags, one per
 candidate rate, giving a column `(232,)`. Example, row 88 (72.0 BPM) at 2.5 s: T = 6000 / 72.0 =
 83.32 steps, between lags 83 and 84, so ACF(83.32) = ACF[83] + 0.32 x (ACF[84] − ACF[83]) =
-0.541 + 0.32 x (0.514 − 0.541) = 0.533: row 88, column 1.
+0.372 + 0.32 x (0.327 − 0.372) = 0.357: row 88, column 1.
 
 | Columns | What they say |
 |---|---|
@@ -426,9 +426,9 @@ Example rows at 2.5 s:
 
 | Row | Rate | ACF at T | ACF at T/2 | ACF at 2T | NCCF at T | S1 ACF at T |
 |---|---|---|---|---|---|---|
-| 18 | 35.9 BPM (half) | 0.15 | 0.52 | 0 (2T outside window) | 0.59 | 0.14 |
-| 88 | 72.0 BPM (true) | **0.53** | −0.05 | 0.15 | **0.77** | **0.53** |
-| 158 | 144.5 BPM (double) | −0.05 | −0.30 | 0.54 | −0.06 | −0.13 |
+| 18 | 35.9 BPM (half) | 0.09 | 0.34 | 0 (2T outside window) | 0.31 | 0.14 |
+| 88 | 72.0 BPM (true) | **0.36** | −0.02 | 0.07 | **0.52** | **0.53** |
+| 158 | 144.5 BPM (double) | −0.02 | −0.26 | 0.37 | −0.03 | −0.13 |
 
 The half rate gives itself away by a high ACF at T/2 (a faster rate fits too); the double rate
 by a low ACF at its own T.
@@ -459,7 +459,7 @@ Rows do not see each other until the softmax, which compares them.
 
 ![Scorer example](figures/tutorial/d_scorer.png)
 
-*One update on its own already points at 72 BPM (peak 0.21 of the total probability).*
+*One update on its own already points at 72 BPM (peak 0.35 of the total probability).*
 
 ### 4.8 E HMM tracker
 **Input:** evidence `(232,)` from D and the posterior `(232,)` of the previous update.
@@ -493,7 +493,7 @@ posterior from the last update ────────────────�
 ![HMM example](figures/tutorial/e_hmm.png)
 
 *Left: dark = likely. The belief is uniform until 1 s, wide at 1-1.5 s, and locked on 72 BPM
-from 2 s. Right: peak probability 0.008 at 1.0 s, 0.024 at 1.5 s, 0.128 at 2.0 s.*
+from 2 s. Right: peak probability 0.009 at 1.0 s, 0.011 at 1.5 s, 0.081 at 2.0 s.*
 
 ### 4.9 R Rhythm
 **Input:** the activation window `(n,)` and the HR estimate. **Output:** the beat-interval CV
@@ -512,11 +512,16 @@ activation window ────────────────────�
   ── differences of neighbours ─────────────────────────────────▶ (b−1,)  intervals
   ── SD / mean ─────────────────────────────────────────────────▶ CV ()
 ```
-Example at 4 s: n = 400, b = 5 beats, 4 intervals, CV 0.018.
+Example at 4 s: n = 400, b = 6 beats, intervals 0.74, 1.13, 0.54, 0.82 and 0.69 s, CV 0.25.
+The activation has two pulses per beat (§4.3); the picker keeps the higher one of each pair,
+which is sometimes the pulse after S1 and sometimes the one after S2, so the intervals vary
+although the heart is regular. The heart then takes the slow/irregular path (§4.10), which
+delays its first reading (known limitation of 1.5).
 
 ![Rhythm example](figures/tutorial/r_rhythm.png)
 
-*At 4 s: 5 beats, interval CV 1.8 %, a regular rhythm.*
+*At 4 s: 6 picked beats, interval CV 25 %: a regular 72 BPM heart read as irregular because
+the picks alternate between the two pulses of each beat.*
 
 ### 4.10 F Readout and output
 **Input:** posterior `(232,)`, HR estimate, snapshot HR, CV, periodicity (activation ACF at the
@@ -606,3 +611,18 @@ device tests in [CHANGELOG.md](../CHANGELOG.md).
 | 1.4.0rc1 | hr_v9c | analysis restart while no heartbeat is heard; slow or irregular readings from 3 s (§4.10) | placement with the input running: median first reading 4.75 to 3.25 s after room noise |
 | 1.5.0rc1 | hr_v10c | network trained against finger taps of many shapes and on synthetic S1-S2 hearts (§4.3) | rhythmic finger taps 81 % to 33 % of clips with a reading; regular first reading median 2.75 s, 90 % by 4 s; faint hearts sooner |
 | 1.5.0rc2 | hr_v10c | slow or irregular first reading from 4 s at probability 0.95 (was 0.9) (§4.10) | more accurate first readings: MAE 1.34 to 1.28 BPM, irregular within ±5 BPM 0.659 to 0.681; slow hearts read later (median 4.0 to 5.25 s) |
+
+### What changed from h14 to h15
+Device builds: h14 = 1.4.0rc1 (`main`), h15 = 1.5.0rc1, h15b = 1.5.0rc2 (branch
+`exp/tap_rejection`). Test split unless noted; details in [CHANGELOG.md](../CHANGELOG.md).
+- Finger taps: the network trains on taps of many shapes and rates (ring 20-250 Hz, with and without
+  a click and a press pulse, 40-160 per min) and on synthetic hearts with S1 and S2, so a pair of
+  sounds marks a beat and a single tap does not. Rhythmic taps with a reading: 81 % to 33 % of 300
+  varied tap clips.
+- Faint hearts: synthetic, −6 dB SNR: median first reading 8.0 to 4.0 s.
+- Accuracy (h15b): MAE 1.36 to 1.28 BPM; regular first reading within ±3 BPM 0.890 to 0.888;
+  irregular within ±5 BPM 0.694 to 0.681.
+- Speed (h15b): regular first reading median 3.0 to 2.75 s, 90th percentile 4.25 s both; slow hearts
+  later (median 4.5 to 5.25 s).
+- Unchanged: C code, state (10,020 bytes), stack, flash and cycles; only the weights and one readout
+  constant (slow or irregular first reading at probability 0.95 from 4 s) changed.

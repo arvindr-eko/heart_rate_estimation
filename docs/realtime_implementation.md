@@ -36,10 +36,10 @@ for start in range(0, audio.size - block + 1, block):
         print("t %.2f s  %.1f BPM  confidence %.2f" % reading)
 ```
 ```
-t 3.25 s  71.5 BPM  confidence 0.98
-t 4.25 s  71.8 BPM  confidence 0.98
+t 3.75 s  71.7 BPM  confidence 0.97
+t 4.75 s  72.0 BPM  confidence 0.98
 ...
-t 9.25 s  72.6 BPM  confidence 0.98
+t 9.75 s  72.8 BPM  confidence 0.98
 ```
 
 | Module | Block | Called | In → out | State |
@@ -151,10 +151,10 @@ output):
 
 ```
 $ c/build/hr_run hr72.raw
-version 1.1.0, model hr_v8 61a88ea2280e, state 9940 bytes, 10.0 s of input
-t 2.25 s  71.3 BPM  confidence 0.89  first
+version 1.5.0rc2, model hr_v10c 243cbe5b6b8b gate 865f4d, state 10020 bytes, 10.0 s of input
+t 3.50 s  72.0 BPM  confidence 0.97  first
 ...
-t 9.25 s  71.2 BPM  confidence 0.98
+t 9.50 s  71.3 BPM  confidence 0.98
 ```
 
 Implementation choices, all equivalent to the Python code up to float32 rounding:
@@ -402,10 +402,10 @@ flash, in the test firmware only. Time per call: DWT cycle counter on Cortex-M3/
 
 ```
 $ ./hr_selftest
-hr_selftest: version 1.1.0, model hr_v8 61a88ea2280e, state 9940 bytes
+hr_selftest: version 1.5.0rc2, model hr_v10c 243cbe5b6b8b gate 865f4d, state 10020 bytes
   hr45_slow       7 readings  PASS
   silence         0 readings  PASS
-  hr72_lift_off  19 readings  PASS
+  hr72_lift_off  14 readings  PASS
   api                         PASS
 hr_selftest: PASS
 ```
