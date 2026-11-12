@@ -45,10 +45,13 @@ training:
     lr: 0.003                              # Adam learning rate
     teacher: hr_v8                         # target activation: this model's TCN on the recording
     distill_weight: 100.0                  # without added noise (MSE, x this weight), 0 on
-    noise_rows: 1500                       # noise-only rows (max_duration_s each, noise_kinds)
+    synth_rows: 600                        # synthetic hearts (S1 and S2 at 30-220 BPM)
+    noise_rows: 2000                       # noise-only rows (max_duration_s each, noise_kinds)
     noise_kinds: [taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum,
                   "real:speech", "real:voice", "real:impact", "real:rub", "real:alarm",
-                  "real:music"]               # kinds of the noise-only rows (target 0)
+                  "real:music", taps, rhythmic_taps, rhythmic_taps, rhythmic_taps]
+                                           # kinds of the noise-only rows (target 0), in turn;
+                                           # taps listed more than once: drawn more often
   scorer:
     positive_tol_rel: 0.03                 # target: states within 3 % of the target HR
     dense_until_s: 5.0                     # training frames every 0.25 s up to here,

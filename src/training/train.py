@@ -80,8 +80,12 @@ def teacher_activation(cfg: dict, x: np.ndarray) -> np.ndarray:
 
 def _net_example(cfg: dict, task: tuple) -> tuple:
     """TCN inputs (n_inputs, frames), target activation, reference HR and beat times of one
-    row: a training row (target: the teacher's activation without the row's added noise) or a
-    noise-only clip ("noise", kind, seed: target 0, no reference)."""
+    row: a training row (target: the teacher's activation without the row's added noise), a
+    noise-only clip ("noise", kind, seed: target 0, no reference) or a synthetic heart
+    ("synth", seed: S1 and S2 at 30-220 BPM through the device channel, target: the teacher's
+    activation without the added noise), which pairs the S1-S2 timing with heartbeats."""
+    if task[0] == "synth":
+        return _synthetic_example(cfg, task[1])
     if task[0] == "noise":
         n = int(cfg["data"]["max_duration_s"] * cfg["stream"]["fs_hz"])
         audio = augment.no_heart_clip(cfg, task[1], n, np.random.default_rng(task[2]))
@@ -95,12 +99,29 @@ def _net_example(cfg: dict, task: tuple) -> tuple:
     return x, teacher_activation(cfg, clean).astype(np.float32), ref_bpm, beats
 
 
+def _synthetic_example(cfg: dict, seed: int) -> tuple:
+    """TCN inputs, target, HR and S1 times of one synthetic heart (log-uniform 30-220 BPM, S2
+    0.3-1.2 x S1, interval CV 0-0.1, a systolic murmur in 30 %) at 5-30 dB SNR (white)."""
+    fs, rng = cfg["stream"]["fs_hz"], np.random.default_rng(seed)
+    hr = float(np.exp(rng.uniform(np.log(30), np.log(220))))
+    audio, s1 = augment.synthetic_pcg(hr, cfg["data"]["max_duration_s"], fs, seed,
+                                      s2_ratio=rng.uniform(0.3, 1.2),
+                                      interval_cv=rng.uniform(0.0, 0.1),
+                                      murmur=rng.uniform(0.1, 0.5) * (rng.random() < 0.3))
+    noisy = augment.add_noise(audio, fs, "white", rng.uniform(5.0, 30.0), seed)
+    x = net_inputs(cfg, augment.channel(noisy, fs, cfg))
+    clean = net_inputs(cfg, augment.channel(audio, fs, cfg))
+    return x, teacher_activation(cfg, clean).astype(np.float32), hr, s1
+
+
 def net_tasks(cfg: dict, rows: pd.DataFrame) -> list:
-    """Training rows, then noise_rows noise-only clips cycling over noise_kinds."""
+    """Training rows, synth_rows synthetic hearts, then noise_rows noise-only clips cycling over
+    noise_kinds."""
     tr = cfg["training"]["net"]
     kinds = tr["noise_kinds"]
-    return _tasks(rows) + [("noise", kinds[k % len(kinds)], cfg["data"]["seed"] + k)
-                           for k in range(tr["noise_rows"])]
+    seed = cfg["data"]["seed"]
+    return (_tasks(rows) + [("synth", seed + 100000 + k) for k in range(tr["synth_rows"])]
+            + [("noise", kinds[k % len(kinds)], seed + k) for k in range(tr["noise_rows"])])
 
 
 def net_dataset(cfg: dict, rows: pd.DataFrame) -> dict:
@@ -392,14 +413,14 @@ def run(cfg: dict, out_name: str, scorer_only: bool = False) -> None:
     rows = training_rows(cfg)
     inputs = {**{k: cfg[k] for k in ("augment", "data", "split", "stream", "frontend", "net")},
               "rows": {k: cfg["training"]["net"][k]
-                       for k in ("teacher", "noise_rows", "noise_kinds")}}
+                       for k in ("teacher", "synth_rows", "noise_rows", "noise_kinds")}}
     teacher = models / f"{cfg['training']['net']['teacher']}_tcn.npz"
     if scorer_only:
         shutil.copyfile(net.weights_path(cfg), models / f"{out_name}_tcn.npz")
     else:
         dataset = _cached(_cache_path(cfg, "tcn_inputs", inputs,
                                       [cfg["paths"]["labels"], cfg["paths"]["negatives"],
-                                       teacher, Path(augment.__file__)]),
+                                       teacher, Path(augment.__file__), Path(__file__)]),
                           lambda: net_dataset(cfg, rows))
         model = fit_net(cfg, dataset)
         weights = export_net(model)

@@ -86,13 +86,24 @@ def events(n: int, fs: int, rate_hz: float, shape, rng: np.random.Generator) -> 
     return x[:n]
 
 
-def tap(fs: int, rng: np.random.Generator) -> np.ndarray:
-    """Finger tap on the chest piece: 2 ms broadband click and a damped diaphragm ring
-    (40-200 Hz, decay 10-40 ms)."""
-    t = np.arange(int(0.15 * fs)) / fs
-    ring = np.exp(-t / rng.uniform(0.01, 0.04)) * np.sin(2 * np.pi * rng.uniform(40, 200) * t)
-    ring[: int(0.002 * fs)] += rng.standard_normal(int(0.002 * fs))
-    return ring
+def tap_shape(rng: np.random.Generator) -> dict:
+    """Shape of one person's finger taps on the chest piece or housing: diaphragm ring
+    (20-250 Hz, log-uniform; decay 5-80 ms), a 2 ms click (half of the shapes) and a
+    low-frequency press pulse (5-30 Hz, half of the shapes)."""
+    return {"ring_hz": np.exp(rng.uniform(np.log(20), np.log(250))),
+            "decay_s": np.exp(rng.uniform(np.log(0.005), np.log(0.08))),
+            "click": rng.random() < 0.5, "press": rng.uniform(0.5, 2.0) * (rng.random() < 0.5),
+            "press_hz": rng.uniform(5, 30)}
+
+
+def tap(fs: int, rng: np.random.Generator, shape: dict | None = None) -> np.ndarray:
+    """One finger tap (tap_shape; a new shape unless given), 0.25 s."""
+    p = shape or tap_shape(rng)
+    t = np.arange(int(0.25 * fs)) / fs
+    x = np.exp(-t / p["decay_s"]) * np.sin(2 * np.pi * p["ring_hz"] * t)
+    if p["click"]:
+        x[: int(0.002 * fs)] += rng.standard_normal(int(0.002 * fs))
+    return x + p["press"] * np.exp(-t / 0.04) * np.sin(2 * np.pi * p["press_hz"] * t)
 
 
 def thump(fs: int, rng: np.random.Generator) -> np.ndarray:
@@ -103,18 +114,20 @@ def thump(fs: int, rng: np.random.Generator) -> np.ndarray:
 
 def noise(kind: str, n: int, fs: int, rng: np.random.Generator) -> np.ndarray:
     """Noise of one type: white, friction (bursts), hum (mains + harmonics), breath, taps (finger
-    taps on the chest piece, about 1.5 per s), rhythmic_taps (taps at a steady 50-110 per min),
+    taps on the chest piece, about 1.5 per s), rhythmic_taps (one tap shape at a steady 40-160
+    per min, jitter 0-8 %; single taps: a pair would mimic S1 and S2),
     handling (thumps and friction), scratch (fingernail on the diaphragm: 300-1500 Hz strokes,
     about 3 per s), speech (talking nearby: 100-400 Hz noise at a 3-6 Hz syllable rate)."""
     t = np.arange(n) / fs
     if kind == "taps":
         return events(n, fs, 1.5, lambda r: tap(fs, r), rng)
     if kind == "rhythmic_taps":
-        x, period = np.zeros(n + fs), 60.0 / rng.uniform(50, 110)
+        x, period, shape = np.zeros(n + fs), 60.0 / rng.uniform(40, 160), tap_shape(rng)
+        jitter = rng.uniform(0, 0.08)
         for t0 in np.arange(rng.uniform(0, period), n / fs, period):
-            ev = rng.uniform(0.7, 1.3) * tap(fs, rng)
-            i = int((t0 + 0.03 * period * rng.standard_normal()) * fs)
-            x[max(i, 0):max(i, 0) + ev.size] += ev
+            ev = rng.uniform(0.7, 1.3) * tap(fs, rng, shape)
+            i = max(int((t0 + jitter * period * rng.standard_normal()) * fs), 0)
+            x[i:i + ev.size] += ev[: max(x.size - i, 0)]
         return x[:n]
     if kind == "handling":
         return (events(n, fs, 1.0, lambda r: thump(fs, r), rng)

@@ -5,6 +5,7 @@ output/
 models/*
 !models/hr_v8_*.npz
 !models/hr_v9c_*.npz
+!models/hr_v10c_*.npz
 __pycache__/
 *.pyc
 .DS_Store

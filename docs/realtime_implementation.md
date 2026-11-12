@@ -321,8 +321,8 @@ Time to the first reading per rhythm: README key results and [results.md](result
 ### 4.5 Contact handling
 - No reading without heart sounds: silence and mains hum alone give none (tested); the network
   is trained to stay silent on other sounds, and a learned presence gate must hold for 1 s
-  before the first reading. Some sounds can still give one (held-out clips: speech 10 %,
-  handling 20 %, rhythmic taps 20 %; `hr-estimation noise-eval`, CHANGELOG 1.4.0rc1).
+  before the first reading. Some sounds can still give one (held-out clips: speech 15 %,
+  voice 10 %, rhythmic finger taps 30 %; `hr-estimation noise-eval`, CHANGELOG 1.5.0rc1).
 - After the first reading, a frame without heartbeat has the periodicity of the activation at
   the estimate below `lost_periodicity` (0.15) or its standard deviation (SD) below
   `min_activation_sd` (0.03). Such frames give no new reading (the latest one stays on show).
@@ -352,11 +352,11 @@ Synthetic: 8 s of a 72 BPM heart, 10 s of silence or noise at the level of the h
 
 | Gap | Measurement ended in the gap | Last reading after the lift-off, median / largest | Largest error of the readings after the lift-off (BPM) | Cases with readings without the heart | First reading after the return, median | Largest error of that reading (BPM) |
 |---|---|---|---|---|---|---|
-| silence | 1 of 1 | 0.75 s / 0.75 s | 0.5 | 0 | 5 s | 0.6 |
-| white | 10 of 10 | 0.75 s / 2.75 s | 0.8 | 0 | 2.625 s | 0.7 |
-| breath | 10 of 10 | 0.75 s / 2.75 s | 1.3 | 0 | 2.875 s | 1.3 |
-| friction | 10 of 10 | 0.75 s / 0.75 s | 0.5 | 0 | 4.5 s | 1.4 |
-| hum | 10 of 10 | 0.75 s / 2.5 s | 1.4 | 0 | 2.5 s | 1.3 |
+| silence | 1 of 1 | 0.75 s / 0.75 s | 0.1 | 0 | 2.75 s | 0.5 |
+| white | 10 of 10 | -0.25 s / -0.25 s | 0.0 | 0 | 2.25 s | 0.6 |
+| breath | 10 of 10 | -0.25 s / -0.25 s | 0.0 | 0 | 2.875 s | 1.3 |
+| friction | 10 of 10 | -0.25 s / 0.75 s | 0.1 | 0 | 4.25 s | 1.6 |
+| hum | 10 of 10 | 0.75 s / 1.75 s | 0.6 | 0 | 2.5 s | 0.2 |
 <!-- end:contact -->
 
 Readings without the heart come from noise passing for heartbeats (friction); they can go on
@@ -447,23 +447,23 @@ self-test (§4.7).
 <!-- begin:c_port -->
 | Case | Band log energy | Activation | Features | Log-likelihood | Posterior | Estimate (BPM) | Binary-feature flips | Readings (Python / C) | Same times | Same heart-present flags |
 |---|---|---|---|---|---|---|---|---|---|---|
-| hr72 | 5.8e-04 | 2.1e-05 | 1.0e-04 | 5.5e-04 | 2.0e-05 | 1.1e-04 | 0 | 8 / 8 | yes | yes |
-| hr45_slow | 5.5e-04 | 2.0e-05 | 6.2e-05 | 6.6e-04 | 1.7e-05 | 5.7e-05 | 0 | 6 / 6 | yes | yes |
-| hr150 | 5.4e-04 | 4.1e-05 | 1.3e-04 | 5.9e-04 | 1.5e-05 | 2.1e-04 | 0 | 8 / 8 | yes | yes |
-| hr250_fast | 5.2e-04 | 1.3e-05 | 2.0e-04 | 1.1e-03 | 3.6e-05 | 3.5e-04 | 0 | 7 / 7 | yes | yes |
-| hr110_loud_s2 | 3.9e-04 | 1.5e-05 | 7.5e-05 | 6.3e-04 | 1.9e-05 | 3.2e-04 | 0 | 7 / 7 | yes | yes |
-| hr80_irregular | 4.7e-04 | 1.1e-05 | 2.2e-04 | 7.1e-04 | 1.2e-05 | 1.7e-04 | 1 | 2 / 2 | yes | yes |
-| silence | 0.0e+00 | 6.0e-08 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
-| hum_only | 3.5e-05 | 5.0e-06 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
-| hr72_lift_off | 5.8e-04 | 2.3e-05 | not compared | not compared | not compared | not compared | - | 16 / 16 | yes | yes |
-| hr72_silent_gap | 5.8e-04 | 2.1e-05 | not compared | not compared | not compared | not compared | - | 16 / 16 | yes | yes |
+| hr72 | 5.8e-04 | 1.2e-05 | 2.1e-04 | 4.1e-04 | 2.4e-05 | 7.6e-05 | 0 | 7 / 7 | yes | yes |
+| hr45_slow | 5.5e-04 | 1.0e-05 | 2.3e-04 | 5.1e-04 | 1.9e-05 | 5.7e-05 | 0 | 7 / 7 | yes | yes |
+| hr150 | 5.4e-04 | 1.1e-05 | 5.7e-05 | 6.9e-04 | 1.7e-05 | 2.1e-04 | 0 | 8 / 8 | yes | yes |
+| hr250_fast | 5.2e-04 | 8.6e-06 | 2.1e-04 | 1.3e-03 | 4.6e-05 | 4.7e-04 | 1 | 7 / 7 | yes | yes |
+| hr110_loud_s2 | 3.9e-04 | 1.0e-05 | 6.9e-05 | 6.6e-04 | 1.7e-05 | 1.6e-04 | 0 | 7 / 7 | yes | yes |
+| hr80_irregular | 4.7e-04 | 9.1e-06 | 1.3e-04 | 4.7e-04 | 1.5e-05 | 1.7e-04 | 0 | 2 / 2 | yes | yes |
+| silence | 0.0e+00 | 2.1e-07 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
+| hum_only | 3.5e-05 | 4.2e-06 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
+| hr72_lift_off | 5.8e-04 | 1.3e-05 | not compared | not compared | not compared | not compared | - | 14 / 14 | yes | yes |
+| hr72_silent_gap | 5.8e-04 | 1.2e-05 | not compared | not compared | not compared | not compared | - | 16 / 16 | yes | yes |
 
 | Measure | Value |
 |---|---|
 | test recordings with identical reading times | 825 of 825 |
-| readings compared | 11413 |
-| BPM difference, median / 99th percentile / largest | 1.4e-04 / 4.1e-03 / 0.468 |
-| confidence difference, 99th percentile / largest | 8.8e-04 / 0.014 |
+| readings compared | 11415 |
+| BPM difference, median / 99th percentile / largest | 1.3e-04 / 3.8e-03 / 0.378 |
+| confidence difference, 99th percentile / largest | 4.3e-04 / 0.011 |
 
 Long session: 30 min of a synthetic 72 BPM heart with white noise at 20 dB SNR, through both
 implementations.
@@ -471,10 +471,10 @@ implementations.
 | Measure | Value |
 |---|---|
 | readings; C reading times identical | 1798; yes |
-| largest difference C against Python: BPM / confidence | 4.0e-03 / 1.6e-05 |
+| largest difference C against Python: BPM / confidence | 2.1e-03 / 6.5e-06 |
 | restarts of the measurement | 0 |
-| mean absolute error against 72 BPM: first / last 5 min | 0.53 / 0.58 BPM |
-| lag sums: largest difference from a float64 computation, relative to lag 0 | 2.3e-05 |
+| mean absolute error against 72 BPM: first / last 5 min | 0.51 / 0.59 BPM |
+| lag sums: largest difference from a float64 computation, relative to lag 0 | 1.3e-05 |
 <!-- end:c_port -->
 
 ## 6. Resources
@@ -483,7 +483,7 @@ Measured on the C build (`make -C c m4`):
 
 | Measure (Cortex-M4, -Os) | Bytes |
 |---|---|
-| code: estimator.c | 2491 |
+| code: estimator.c | 2492 |
 | code: features.c | 3216 |
 | code: frontend.c | 960 |
 | code: net.c | 624 |
@@ -492,9 +492,9 @@ Measured on the C build (`make -C c m4`):
 | code: rhythm.c | 788 |
 | code: scorer.c | 312 |
 | code: tracker.c | 660 |
-| code, total | 10177 |
+| code, total | 10178 |
 | constants: float32 coefficients and weights (hr_model.c) | 7340 |
-| flash, total without libm | 17517 |
+| flash, total without libm | 17518 |
 | RAM: state (hr_state_t) | 10020 |
 | RAM: stack, deepest call path (hr_process_block → hr_frontend_process → __aeabi_memclr4) | 672 |
 
@@ -508,8 +508,8 @@ Cortex-M4 cycles):
 
 | Call (host, -O2) | Mean (µs) | Largest (µs) |
 |---|---|---|
-| ordinary block | 9.8 | 30.0 |
-| frame block | 29.2 | 47.0 |
+| ordinary block | 10.0 | 33.0 |
+| frame block | 29.9 | 59.0 |
 <!-- end:resources -->
 
 ## 7. Parameters

@@ -194,9 +194,13 @@ in git, others ignored).
   the target period, the ECG HR over that window; no beat-by-beat labels are needed. Since
   hr_v9 also: the output must match the `teacher` network (hr_v8) on the recording without
   added noise (squared error x `distill_weight`), and stay at 0 on `noise_rows` clips of
-  non-heart sound only (`noise_kinds`, §4.1). Initialised from the teacher, zero weights for the
-  added inputs. Trained in PyTorch, exported to numpy and checked against the streaming
-  implementation.
+  non-heart sound only (`noise_kinds`, §4.1; finger taps drawn more often, one tap shape per
+  clip: ring 20-250 Hz, decay 5-80 ms, with or without a click and a press pulse, 40-160 per
+  min). Since hr_v10c also: `synth_rows` synthetic hearts (S1 and S2 at 30-220 BPM through the
+  device channel) with the teacher's output as target, so that a pair of sounds at the systolic
+  interval marks a heartbeat and a single tap does not. Initialised from the teacher, zero
+  weights for the added inputs. Trained in PyTorch, exported to numpy and checked against the
+  streaming implementation.
 - Scorer (block D): inputs from streaming the training recordings and their copies through
   blocks A-C of the device code; target: the states within 3 % of the ECG HR over the frame's
   window. Frames every 0.25 s up to 5 s, then one per second.
@@ -216,8 +220,9 @@ in git, others ignored).
 | net.lr | 0.003 | Adam learning rate |
 | net.teacher | hr_v8 | target activation: this model's TCN on the recording |
 | net.distill_weight | 100.0 | without added noise (MSE, x this weight), 0 on |
-| net.noise_rows | 1500 | noise-only rows (max_duration_s each, noise_kinds) |
-| net.noise_kinds | [taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum, "real:speech", "real:voice", "real:impact", "real:rub", "real:alarm", "real:music"] | kinds of the noise-only rows (target 0) |
+| net.synth_rows | 600 | synthetic hearts (S1 and S2 at 30-220 BPM) |
+| net.noise_rows | 2000 | noise-only rows (max_duration_s each, noise_kinds) |
+| net.noise_kinds | [taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum, "real:speech", "real:voice", "real:impact", "real:rub", "real:alarm", "real:music", taps, rhythmic_taps, rhythmic_taps, rhythmic_taps] | kinds of the noise-only rows (target 0), in turn; taps listed more than once: drawn more often |
 | scorer.positive_tol_rel | 0.03 | target: states within 3 % of the target HR |
 | scorer.dense_until_s | 5.0 | training frames every 0.25 s up to here, |
 | scorer.sparse_step_s | 1.0 | then one per second |

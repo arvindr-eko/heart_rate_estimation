@@ -18,7 +18,7 @@ readout:                       # when the first reading appears; changing these 
 
 # ── 2. ALGORITHM (fixed by the trained model) ────────────────────────────────────────────────────
 
-weights: hr_v9c                            # models/hr_v9c_*.npz: TCN, scorer, calibration
+weights: hr_v10c                           # models/hr_v10c_*.npz: TCN, scorer, calibration
 
 stream:
   fs_hz: 4000                              # PCG sample rate

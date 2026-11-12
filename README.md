@@ -11,22 +11,22 @@ algorithm; the C port (`c/`) is verified against it.
 <!-- begin:version -->
 | Version | Model | Generated | Commit | Runs |
 |---|---|---|---|---|
-| 1.4.0rc1 | hr_v9c | 2026-11-11 | db171e4 | val `20261111_200954_hr_v9c_val_v1.4.0rc1`, test `20261111_201036_hr_v9c_test_v1.4.0rc1`, stress `20261111_201137_hr_v9c_test_v1.4.0rc1_stress` |
+| 1.5.0rc1 | hr_v10c | 2026-11-12 | b1d0aa8 | val `20261112_095437_hr_v10c_val_v1.5.0rc1`, test `20261112_095516_hr_v10c_test_v1.5.0rc1`, stress `20261112_095612_hr_v10c_test_v1.5.0rc1_stress` |
 
 Key results, test split (703 recordings with a trusted ECG reference); all results in
 [docs/results.md](docs/results.md):
 
 | Result | Value |
 |---|---|
-| regular, 50-200 BPM: first reading, median / 90 % by | 3 s / 4.25 s |
-| regular: first reading within ±3 BPM; reading within ±3 BPM at 4 s | 89.0 %; 82.2 % |
+| regular, 50-200 BPM: first reading, median / 90 % by | 2.75 s / 4 s |
+| regular: first reading within ±3 BPM; reading within ±3 BPM at 4 s | 88.6 %; 88.1 % |
 | regular: converged (every later reading within ±3 BPM), median | 3 s |
-| slow, < 50 BPM: first reading, median; within ±10 BPM | 4.5 s; 100.0 % |
-| irregular or AF: first reading within ±10 BPM; within ±3 BPM at 9 s | 78.7 %; 79.6 % |
-| all: half/double readings; with a reading by 10 s | 0.3 %; 99.0 % |
+| slow, < 50 BPM: first reading, median; within ±10 BPM | 4 s; 100.0 % |
+| irregular or AF: first reading within ±10 BPM; within ±3 BPM at 9 s | 76.2 %; 77.0 % |
+| all: half/double readings; with a reading by 10 s | 0.3 %; 98.3 % |
 | targets met (test and stress) | 8 of 14 |
 | C port: test recordings with the Python reading times | 825 of 825 |
-| C port, Cortex-M4: RAM of the state; stack, libm included; flash of code and constants without libm | 10,020 bytes (budget 10,240, within); 672 bytes (budget 1,024, within); 17,517 bytes (budget 5,120, exceeded) |
+| C port, Cortex-M4: RAM of the state; stack, libm included; flash of code and constants without libm | 10,020 bytes (budget 10,240, within); 672 bytes (budget 1,024, within); 17,518 bytes (budget 5,120, exceeded) |
 <!-- end:version -->
 
 ## Documents
@@ -50,7 +50,7 @@ Key results, test split (703 recordings with a trusted ECG reference); all resul
 - Input: 200 int16 PCG samples every 50 ms. Output: nothing, or a reading (time, BPM,
   confidence): the first one when the estimate is likely right, then one per second while a
   heartbeat is heard.
-- Regular rhythms at common rates: first reading after 3-4.25 s, aimed at ±3 BPM. Slow
+- Regular rhythms at common rates: first reading after 2.75-4 s, aimed at ±3 BPM. Slow
   (< 50 BPM) or irregular hearts: first reading from 3 s within ±10 BPM, then converging.
   Only heart sounds give readings: the network is trained to stay silent on speech, knocks,
   taps, rubbing and other sounds, and a learned presence gate must hold for 1 s before the first
@@ -65,10 +65,9 @@ Key results, test split (703 recordings with a trusted ECG reference); all resul
   never an algorithm input.
 - Known limitations of this version: the regular group's first reading misses its ±3 BPM target
   (92 %), irregular rhythms and very fast (sped-up) hearts miss theirs; some non-heart sounds
-  still give readings (held-out clips: speech 10 %, handling 20 %, rhythmic taps 20 %); very
-  faint hearts (−6 dB SNR) read later than without the idle restart; the data is filtered on
-  signal quality (unfiltered evaluation open); the C port exceeds the 5 KB flash budget. Details
-  and the device tests: [CHANGELOG.md](CHANGELOG.md).
+  still give readings (held-out clips: speech 15 %, voice 10 %, rhythmic finger taps 30 %); the
+  data is filtered on signal quality (unfiltered evaluation open); the C port exceeds the 5 KB
+  flash budget. Details and the device tests: [CHANGELOG.md](CHANGELOG.md).
 
 ## 2. Quick start
 Environment (run once; Python 3.11):
@@ -150,9 +149,9 @@ tests/                      pytest suite
 CHANGELOG.md                versions: what changed, model, key results
 pyproject.toml              package and command; dependencies from requirements.txt
 requirements.txt            pinned packages
-models/                     model files of shipped versions: hr_v8 (1.0-1.2), hr_v9c (1.3-1.4
-                            release candidates); network, scorer, calibration, presence gate;
-                            other models stay out of git
+models/                     model files of shipped versions: hr_v8 (1.0-1.2), hr_v9c (1.3-1.4),
+                            hr_v10c (1.5) release candidates; network, scorer, calibration,
+                            presence gate; other models stay out of git
 data/                       recordings and non-heart sound clips (not in git)
 output/                     splits, labels, runs, caches, golden readings (not in git)
 ```

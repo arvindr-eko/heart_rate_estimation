@@ -30,6 +30,7 @@ and the rate is likely right, then one per second.
    - [4.9 R Rhythm](#49-r-rhythm)
    - [4.10 F Readout and output](#410-f-readout-and-output)
 5. [One heart end to end](#5-one-heart-end-to-end)
+6. [Versions since 1.1.0](#6-versions-since-110)
 
 ## 1. Signal flow
 
@@ -44,8 +45,9 @@ and the rate is likely right, then one per second.
 - **Every update, 0.25 s (every 5th block):** feature matrix of 232 candidate rates x 17 features →
   scores → HMM → updated heart-rate estimate (4 estimates per second).
 - **Readings:** the first when a heart has been heard for 1 s and the estimate is confident,
-  at 1.5 s at the earliest (3 s median for regular hearts, from 3 s for slow or irregular ones);
-  then one per second while a heartbeat is heard; 2 s without one restart the measurement.
+  at 1.5 s at the earliest (2.75 s median for regular hearts, from 3 s for slow or irregular
+  ones); then one per second while a heartbeat is heard; 2 s without one restart the
+  measurement.
   Before the first reading, 2 s without beat activity restart the analysis, so a placement with
   the input already running starts like a fresh measurement.
 
@@ -311,15 +313,20 @@ training:                  (32, 8, 400) ──▶ (32, 400)   batches of 32 clip
 Being causal and convolutional, the same weights run on a stream of any length. Training uses
 no beat labels: the output must repeat at the period of the heart rate measured on the ECG, stay
 close to the previous network's (hr_v8) output on the recording without added noise, and stay
-at 0 on clips of other sounds (speech, knocks, rubbing, music; [data.md](data.md) §4.1 and §5).
+at 0 on clips of other sounds (speech, knocks, rubbing, music, and finger taps of many shapes
+and rates). Synthetic hearts with S1 and S2 are trained as heartbeats, so a pair of sounds at
+the systolic interval counts as a beat and a single tap does not ([data.md](data.md) §4.1 and
+§5).
 
-Example: the block at 1.35-1.40 s gives activation `[0.02, 0.43, 1.0, 0.92, 0.98]`: the beat
-appears in its second 10 ms step.
+Example: the S1 at 1.36 s alone leaves the activation near 0; the block at 1.55-1.60 s, after
+it, gives `[0.89, 0.81, 0.95, 0.98, 0.97]`.
 
 ![Activation example](figures/tutorial/b_activation.png)
 
-*The activation is high from S1 through systole and low in diastole: one wide pulse per beat.
-The flat 0.5 before the first beat is start-up.*
+*The activation pulses after S1 and again after S2 (about 0.15-0.25 s and 0.4-0.55 s after S1
+at 72 BPM) and is low at the onset of S1 and in late diastole: the network responds to the S1-S2
+pair rather than to a single sound, which taps lack. The pattern repeats once per beat, which is
+what the features measure (§4.6). The flat 0.3 before the first beat is start-up.*
 
 ### 4.4 C Activation window
 **Input:** one activation value every 10 ms. **Output:** the window `(n,)` of the most recent
@@ -541,9 +548,9 @@ rough mass (), periodicity () ── logistic, 3 coefficients ──────
 gates, path, p_fine or p_rough, time ── rules 1-4 ──────────────▶ due: yes / no
 yes ────────────────────────────────────────────────────────────▶ reading (t_s, bpm, confidence)
 ```
-Example: at 2.0 s `p_fine` is already 0.85, but the picked beats' CV puts the heart on the
-slow/irregular path and the presence gate is at 0.33. Presence reaches 0.68 at 2.5 s; after 1 s
-of presence, at 3.25 s, `p_rough` 0.98 ≥ 0.97 → reading (3.25 s, 71.5 BPM, 0.98).
+Example: at 2.5 s `p_fine` is already 0.92, but the picked beats' CV puts the heart on the
+slow/irregular path and the presence gate is at 0.21. Presence reaches 0.74 at 3.0 s; after 1 s
+of presence, at 4.0 s, `p_rough` 0.96 ≥ 0.9 → reading (4.0 s, 71.7 BPM, 0.96).
 
 After the first reading: the current HMM estimate every 1 s while a heartbeat is heard. An
 update without heartbeat (presence < 0.3, periodicity < 0.15, activation SD < 0.03 or recent
@@ -563,8 +570,9 @@ update at any time. The three `readout` settings can change at runtime without r
 
 ![Readout example](figures/tutorial/f_readout.png)
 
-*`p_fine` crosses 0.7 at 2.0 s, but the presence gate holds the reading until 3.25 s (1 s
-after it opens at 2.5 s), when the slow/irregular rule (`p_rough` ≥ 0.97 from 3 s) is met.*
+*`p_fine` crosses 0.7 at 2.25 s, but the presence gate holds the reading until 4.0 s (1 s
+after it opens at 3.0 s), when the slow/irregular rule (`p_rough` ≥ 0.9 from 4 s) is met. This
+clean example without the device channel is slower than recordings (median 2.75 s).*
 
 ## 5. One heart end to end
 
@@ -576,12 +584,24 @@ allowed reading (1.5 s). Orange dashed: first reading.*
 | Time | Window n | Inside the algorithm | Output |
 |---|---|---|---|
 | 0-1 s | 0 → 100 | A and B run every step; windows fill; HMM belief uniform | nothing |
-| 1.0 s | 100 | first matrix `(232, 17)`; HMM's first evidence; estimate 62.7 BPM, `p_fine` 0.04 | nothing |
-| 1.5 s | 150 | earliest allowed time; estimate 71.9 BPM, but the picked beats' CV puts it on the slow/irregular path; presence 0.08 | nothing |
-| 2.0 s | 200 | estimate 72.2 BPM, periodicity 0.37, `p_fine` 0.85; presence 0.33 < 0.6 | nothing |
-| 2.5 s | 250 | presence 0.68 ≥ 0.6: heart present, 1 s confirmation starts | nothing |
-| 3.25 s | 325 | presence held 1 s; `p_rough` 0.98 ≥ 0.97 (slow/irregular path, from 3 s) | **first reading: 71.5 BPM, confidence 0.98** |
-| 4.25, 5.25 s | 400 from 4 s | HMM refines | 71.8, 71.9 BPM, confidence 0.98 |
+| 1.0 s | 100 | first matrix `(232, 17)`; HMM's first evidence; estimate 81.1 BPM, `p_fine` 0.05 | nothing |
+| 1.5 s | 150 | earliest allowed time; estimate 79.5 BPM; presence 0.00 | nothing |
+| 2.0 s | 200 | estimate 72.2 BPM, periodicity 0.27, `p_fine` 0.40; the picked beats' CV puts it on the slow/irregular path; presence 0.06 | nothing |
+| 2.5 s | 250 | `p_fine` 0.92; presence 0.21 < 0.6 | nothing |
+| 3.0 s | 300 | presence 0.74 ≥ 0.6: heart present, 1 s confirmation starts | nothing |
+| 4.0 s | 400 | presence held 1 s; `p_rough` 0.96 ≥ 0.9 (slow/irregular path, from 4 s) | **first reading: 71.7 BPM, confidence 0.96** |
+| 5, 6 s | 400 | HMM refines | 71.9, 71.7 BPM, confidence 0.98 |
 
-On real recordings the first reading for regular hearts comes at 3 s (median, test split);
-slow or irregular hearts from 3 s ([results.md](results.md) §2).
+On real recordings the first reading for regular hearts comes at 2.75 s (median, test split;
+90 % by 4 s); slow or irregular hearts from 3 s ([results.md](results.md) §2).
+
+## 6. Versions since 1.1.0
+What each release candidate changed in the blocks above; numbers on held-out data, details and
+device tests in [CHANGELOG.md](../CHANGELOG.md).
+
+| Version | Model | Change | Effect |
+|---|---|---|---|
+| 1.2.0rc1 | hr_v8 | learned presence gate and signal-quality check in F (§4.10) | fewer readings on taps and handling; readings stop about 3 s after a lift-off |
+| 1.3.0rc1 | hr_v9c | front end with 8 values (§4.1); network trained to output 0 on speech, knocks, rubbing, music; presence 0.6 held 1 s | speech 40 % to 10 %, knocks 20 % to 0 % of held-out clips with a reading |
+| 1.4.0rc1 | hr_v9c | analysis restart while no heartbeat is heard; slow or irregular readings from 3 s (§4.10) | placement with the input running: median first reading 4.75 to 3.25 s after room noise |
+| 1.5.0rc1 | hr_v10c | network trained against finger taps of many shapes and on synthetic S1-S2 hearts (§4.3) | rhythmic finger taps 81 % to 33 % of clips with a reading; regular first reading median 2.75 s, 90 % by 4 s; faint hearts sooner |

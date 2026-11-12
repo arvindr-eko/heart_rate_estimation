@@ -22,6 +22,53 @@ key test results; the full documentation of a version is `docs/` at its tag.
 6. Commit, tag `vMAJOR.MINOR.PATCH`, push the branch and the tag
    (`git push origin main vMAJOR.MINOR.PATCH`).
 
+## 1.5.0rc1 (2026-11-12), model hr_v10c, beat detector trained against finger taps (release candidate, device test pending)
+From the 1.4.0rc1 device test: finger taps still gave readings. With taps more varied than the
+training's tap model (ring 20-250 Hz, decay 5-80 ms, with or without a click and a press pulse,
+40-160 per min), 81 % of 300 rhythmic-tap clips gave a reading with 1.4.0rc1 (low-pitched rings
+and press pulses about 95 %); the noise evaluation's taps (20 %) covered only the narrow model.
+Same front end, network layout, readout and C code; new weights. C API unchanged.
+- Taps (`augment.tap_shape`, `tap`, `noise`): one tap shape per clip over the ranges above,
+  rhythmic taps at a steady 40-160 per min with 0-8 % jitter, single taps (a pair would mimic S1
+  and S2).
+- Network training (`training.net`): `noise_rows` 1,500 to 2,000 with taps drawn three times as
+  often (`noise_kinds`); `synth_rows` 600 synthetic hearts (`train._synthetic_example`: S1 and S2
+  at 30-220 BPM, S2 0.3-1.2 x S1, interval CV 0-0.1, a murmur in 30 %, 5-30 dB SNR, device
+  channel; target: the teacher's output without the added noise), so a pair at the systolic
+  interval marks a heart and a single tap does not. The TCN input cache key now covers
+  `synth_rows` and `train.py`. hr_v10c is trained by `hr-estimation train --out hr_v10c` and
+  `train --presence-only` (reproducible from the repository, unlike hr_v9c).
+- Taps, share of clips with any reading, 1.4.0rc1 to 1.5.0rc1: 300 broad rhythmic-tap clips
+  (separate seeds) 0.81 to 0.33; noise evaluation rhythmic taps 0.80 to 0.30, single taps 0.15
+  to 0.05. Other no-heart clips: speech 0.10 to 0.15, voice 0 to 0.10, knocks 0 to 0.05,
+  rubbing 0.05 to 0.10, music 0 to 0.05, handling 0.20 to 0.15, alarms 0.05 both.
+- Faint hearts (synthetic, white noise; in-distribution for hr_v10c, which trains on the same
+  generator): median first reading at +5, 0, −3, −6 dB SNR 4.0, 4.75, 5.0, 8.0 s to 3.0, 3.5,
+  3.75, 4.0 s, all within ±3 BPM.
+- Placement (validation): after quiet sound median 4.00 to 3.50 s, after handling 5.00 to
+  4.50 s, after room noise 3.25 to 3.38 s; fresh start 90th percentile 5.10 to 4.55 s.
+- Test split against 1.4.0rc1: regular median time to first reading 3.0 to 2.75 s (90th
+  percentile 4.25 to 4.0 s), first within ±3 BPM 0.890 to 0.886, within ±3 BPM at 4 s 0.822 to
+  0.881, MAE 1.36 to 1.34 BPM, slow median 4.5 to 4.0 s, irregular first within ±10 BPM 0.787 to
+  0.762, irregular coverage 1.000 to 0.987. Stress: 90th percentile 5.5 to 4.75 s, within ±3 BPM
+  at 4 s 0.731 to 0.786, reading by 10 s 0.937 to 0.950, MAE 1.90 to 1.94 BPM. Validation
+  disagrees on MAE (1.69 to 1.79 BPM).
+- C port: unchanged code, state 10,020 bytes and stack as 1.4.0rc1; Python and C identical on
+  the synthetic cases and the test recordings. Golden readings from the test run.
+- Experiments (validation, noise evaluation, the 300 broad tap clips and synthetic faint hearts):
+  - hr_v10 (broad taps with 30 % double taps, no synthetic hearts): taps 0.20, broad clips 0.24,
+    test MAE 1.30 BPM, but synthetic hearts read late or not at all (7 corner cases failed) and
+    stress irregular coverage 0.943; hr_v10b (single taps only): more corner cases failed;
+    hr_v10d (200 synthetic hearts): rhythmic taps 0.55;
+  - `idle_activation` 0.3: no faint-heart difference with hr_v10 or hr_v10c, placement after room
+    noise slower; kept 0.4. Presence 0.5 or confirmation 0.75 s on hr_v10: no gain;
+  - beat picking on hr_v9c: `rhythm.refractory_rel` 0.75 median 3.0 to 2.75 s (first within
+    ±3 BPM −0.004), `decision.regular_max_cv` 0.15 or 0.20 median 2.75 or 2.5 s (−0.008 or
+    −0.028, irregular −0.021); not adopted (on hr_v10 the refractory cost 0.023).
+- Known limitations: irregular hearts slightly worse (above); speech and voice give a reading in
+  15 % and 10 % of held-out clips; rhythmic taps still in 30 %; the synthetic corner cases are no
+  longer independent of the network's training data.
+
 ## 1.4.0rc1 (2026-11-11), model hr_v9c, faster first reading with the input running (release candidate, device-tested)
 From the 1.3.0rc1 device test: no readings on clicks or speech, but the first reading after 6-7 s
 on the screen. Firmware bench (coral-fw, placement after 10 s of off-chest sound with the
