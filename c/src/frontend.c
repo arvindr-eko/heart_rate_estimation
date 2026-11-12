@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include "hr.h"
+#include "hr_blocks.h"
 
 /* Zero filter states; set from the first sample of the first block. */
 void hr_frontend_init(hr_frontend_t *fe)

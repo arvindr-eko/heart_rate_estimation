@@ -5,7 +5,7 @@
  * within HR_EST_HALFWIDTH of the most likely state. */
 #include <math.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 #define MASS_FLOOR 1e-30f           /* estimate denominator floor, as the reference */
 

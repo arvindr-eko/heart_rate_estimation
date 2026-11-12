@@ -11,6 +11,7 @@
 #include <math.h>
 
 #include "hr.h"
+#include "hr_blocks.h"
 
 #if (HR_S1_DECIMATION & (HR_S1_DECIMATION - 1)) != 0
 #error "S1-band lags are derived exactly from hr_lag only for a power-of-2 decimation"

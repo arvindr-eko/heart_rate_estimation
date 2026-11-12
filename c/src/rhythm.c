@@ -6,6 +6,7 @@
 #include <math.h>
 
 #include "hr.h"
+#include "hr_blocks.h"
 
 /* Sample i of the window (oldest first) starting at ring index start. */
 static float at(const float *hist, uint16_t start, uint16_t i)

@@ -13,6 +13,7 @@
 #include <math.h>
 
 #include "hr.h"
+#include "hr_blocks.h"
 
 /* Posterior mass of the states within ±half_width_bpm of hr. */
 float hr_mass_within(const float posterior[HR_N_STATES], float hr, float half_width_bpm)

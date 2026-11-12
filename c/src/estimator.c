@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include "hr.h"
+#include "hr_blocks.h"
 
 #define BLOCK_ROUNDING 1e-4f        /* tolerance of the seconds-to-blocks conversion */
 #define MAX_SETTING_S 3600.0f       /* longest accepted time setting */

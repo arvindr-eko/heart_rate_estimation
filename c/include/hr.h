@@ -15,16 +15,19 @@
 #ifndef HR_H
 #define HR_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
-#include "hr_model.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef enum {
+typedef enum hr_result {
     HR_OK = 0,
     HR_ERR_ARG = -1                 /* NULL pointer or setting out of range */
 } hr_result_t;
 
-typedef enum {
+typedef enum hr_phase {
     HR_PHASE_WARMUP = 0,            /* less than the minimum features window: no features,
                                        the estimate is the tracker's prior; also the frame
                                        that ended a measurement (restart) */
@@ -33,12 +36,12 @@ typedef enum {
                                        while a heartbeat is heard */
 } hr_phase_t;
 
-typedef enum {
+typedef enum hr_path {
     HR_PATH_REGULAR = 0,            /* regular rhythm at a common rate */
     HR_PATH_SLOW_IRREGULAR = 1      /* estimate below HR_SLOW_BPM or irregular picked beats */
 } hr_path_t;
 
-typedef struct {
+typedef struct hr_settings {
     float confidence;               /* regular hearts: probability within ±3 BPM required for
                                        the first reading, (0, 1]; lower is sooner */
     float slow_irregular_after_s;   /* slow or irregular hearts: earliest first reading, s */
@@ -46,16 +49,25 @@ typedef struct {
                                        the estimate is roughly certain, s */
 } hr_settings_t;
 
-typedef struct {
+typedef struct hr_reading {
     float t_s;                      /* time since the measurement started (hr_init,
                                        hr_reset or the automatic restart), s */
     float bpm;                      /* heart rate, beats per minute */
+
+    /* ML specific readings */
     float confidence;               /* calibrated probability of the frame's path */
     uint8_t path;                   /* hr_path_t of the frame */
     uint8_t first;                  /* 1 for the first reading of the measurement */
+
+    /* Combo13 specific readings */
+    bool bpm_valid;                 /* false while suppressed (settling, jump/delay guard) or flatline */
+    bool is_flatline;               /* true when no real signal is present (device off/disconnected) */
+    float raw_candidate_bpm;        /* this tick's own raw estimate, before combine-stage smoothing */
+    bool raw_candidate_valid;       /* false when the raw estimate was vetoed or not yet available */
+    int harmonic_confirmed;         /* 1=confirmed, 0=vetoed, -1=not evaluated this tick */
 } hr_reading_t;
 
-typedef struct {                    /* state of the latest frame (every HR_FRAME_BLOCKS blocks) */
+typedef struct hr_frame_info {      /* state of the latest frame (every HR_FRAME_BLOCKS blocks) */
     float t_s;
     float estimate_bpm;             /* tracker estimate, also before the first reading */
     float frame_bpm;                /* best state of the frame alone; NaN without features */
@@ -71,7 +83,8 @@ typedef struct {                    /* state of the latest frame (every HR_FRAME
                                        >= HR_MIN_ACTIVATION_SD (the first-reading gates) */
 } hr_frame_info_t;
 
-#include "hr_blocks.h"              /* hr_state_t: block states (fields are private) */
+/* Forward declaration */
+typedef struct hr_state hr_state_t;
 
 /* Defaults of configs/device.yml (readout). */
 void hr_default_settings(hr_settings_t *settings);
@@ -87,9 +100,22 @@ void hr_reset(hr_state_t *s);
 hr_result_t hr_set_settings(hr_state_t *s, const hr_settings_t *settings);
 void hr_get_settings(const hr_state_t *s, hr_settings_t *settings);
 
+/* Add new data to the internal chunk buffers */
+bool hr_push_data(hr_state_t *st, const int16_t *samples, int n);
+
+/* Do any processing on the chunk within the block */
+int hr_process_chunk(hr_state_t *st);
+
+/* Update internal buffer pointers for the next chunk */
+int hr_update_chunk(hr_state_t *st);
+
+/* Process one block of samples; 1 and *out filled when a reading is due,
+ * else 0 (out may be NULL). */
+int hr_calculate(hr_state_t *st, hr_reading_t *out);
+
 /* Process one block of HR_BLOCK_SAMPLES samples; 1 and *out filled when a reading is due,
  * else 0 (out may be NULL). */
-int hr_process_block(hr_state_t *s, const int16_t pcm[HR_BLOCK_SAMPLES], hr_reading_t *out);
+int hr_process_block(hr_state_t *s, const int16_t *pcm, hr_reading_t *out);
 
 /* Latest reading; 0 before the first reading. */
 int hr_get_reading(const hr_state_t *s, hr_reading_t *out);
@@ -117,4 +143,8 @@ const float *hr_debug_log_emission(const hr_state_t *s);  /* [HR_N_STATES] */
 int hr_debug_has_features(const hr_state_t *s);            /* features of the latest frame */
 #endif
 
+#ifdef __cplusplus
+}
 #endif
+
+#endif /* HR_H */
