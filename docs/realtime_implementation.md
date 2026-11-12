@@ -450,7 +450,7 @@ self-test (§4.7).
 | hr72 | 5.8e-04 | 1.2e-05 | 2.1e-04 | 4.1e-04 | 2.4e-05 | 7.6e-05 | 0 | 7 / 7 | yes | yes |
 | hr45_slow | 5.5e-04 | 1.0e-05 | 2.3e-04 | 5.1e-04 | 1.9e-05 | 5.7e-05 | 0 | 7 / 7 | yes | yes |
 | hr150 | 5.4e-04 | 1.1e-05 | 5.7e-05 | 6.9e-04 | 1.7e-05 | 2.1e-04 | 0 | 8 / 8 | yes | yes |
-| hr250_fast | 5.2e-04 | 8.6e-06 | 2.1e-04 | 1.3e-03 | 4.6e-05 | 4.7e-04 | 1 | 7 / 7 | yes | yes |
+| hr250_fast | 5.2e-04 | 8.6e-06 | 2.1e-04 | 1.3e-03 | 4.6e-05 | 4.7e-04 | 1 | 6 / 6 | yes | yes |
 | hr110_loud_s2 | 3.9e-04 | 1.0e-05 | 6.9e-05 | 6.6e-04 | 1.7e-05 | 1.6e-04 | 0 | 7 / 7 | yes | yes |
 | hr80_irregular | 4.7e-04 | 9.1e-06 | 1.3e-04 | 4.7e-04 | 1.5e-05 | 1.7e-04 | 0 | 2 / 2 | yes | yes |
 | silence | 0.0e+00 | 2.1e-07 | not compared | not compared | not compared | not compared | - | 0 / 0 | yes | yes |
@@ -461,9 +461,9 @@ self-test (§4.7).
 | Measure | Value |
 |---|---|
 | test recordings with identical reading times | 825 of 825 |
-| readings compared | 11415 |
-| BPM difference, median / 99th percentile / largest | 1.3e-04 / 3.8e-03 / 0.378 |
-| confidence difference, 99th percentile / largest | 4.3e-04 / 0.011 |
+| readings compared | 11145 |
+| BPM difference, median / 99th percentile / largest | 1.3e-04 / 4.8e-03 / 0.378 |
+| confidence difference, 99th percentile / largest | 4.2e-04 / 0.011 |
 
 Long session: 30 min of a synthetic 72 BPM heart with white noise at 20 dB SNR, through both
 implementations.
@@ -508,8 +508,8 @@ Cortex-M4 cycles):
 
 | Call (host, -O2) | Mean (µs) | Largest (µs) |
 |---|---|---|
-| ordinary block | 10.0 | 33.0 |
-| frame block | 29.9 | 59.0 |
+| ordinary block | 10.1 | 30.0 |
+| frame block | 30.1 | 55.0 |
 <!-- end:resources -->
 
 ## 7. Parameters
@@ -558,7 +558,7 @@ Cortex-M4 cycles):
 | decision | min_s | `1.5` | no reading before this time |
 | decision | slow_bpm | `50` | below: slow path |
 | decision | regular_max_cv | `0.10` | picked-beat interval CV at or above: irregular path |
-| decision | slow_irregular_confidence | `0.9` | slow/irregular path: probability within ±10 BPM |
+| decision | slow_irregular_confidence | `0.95` | slow/irregular path: probability within ±10 BPM |
 | decision | slow_irregular_early_confidence | `0.97` | slow/irregular path before slow_irregular_relaxed_s: |
 | decision | slow_irregular_relaxed_s | `4.0` | this probability within ±10 BPM is needed |
 | decision | conf_fine_bpm | `4.0` | confidence of a regular reading: mass within ±4 BPM |

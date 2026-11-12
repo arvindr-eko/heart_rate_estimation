@@ -22,6 +22,24 @@ key test results; the full documentation of a version is `docs/` at its tag.
 6. Commit, tag `vMAJOR.MINOR.PATCH`, push the branch and the tag
    (`git push origin main vMAJOR.MINOR.PATCH`).
 
+## 1.5.0rc2 (2026-11-12), model hr_v10c, more accurate first reading (release candidate, device test pending)
+From the 1.5.0rc1 device impression that the first reading was a little less accurate than with
+1.4.0rc1, which the test split confirms for irregular hearts. Same model and C code; C API
+unchanged.
+- Readout: slow or irregular first reading from `slow_irregular_relaxed_s` (4 s) at a
+  probability within ±10 BPM of 0.95 (`decision.slow_irregular_confidence`, was 0.9); from 3 s
+  at 0.97 as before.
+- Test split, 1.5.0rc1 to 1.5.0rc2 (1.4.0rc1 in brackets): MAE 1.34 to 1.28 BPM (1.36);
+  regular first within ±3 BPM 0.886 to 0.888 (0.890); irregular first within ±10 BPM 0.762 to
+  0.770 (0.787), within ±5 BPM 0.659 to 0.681 (0.694); regular median first reading 2.75 s
+  (3.0), 90th percentile 4.0 to 4.25 s (4.25); slow median 4.0 to 5.25 s (4.5); within ±3 BPM at
+  4 s 0.881 to 0.792 (0.822), as fewer recordings have a reading by 4 s; reading by 10 s 0.983
+  to 0.979. Stress: MAE 1.94 to 1.76 BPM, 90th percentile 4.75 to 5.5 s.
+- No-heart clips: speech 0.15 to 0.05, rhythmic taps 0.30 to 0.25, handling 0.15 to 0.10.
+- Tried on validation: waiting until 3.5 s for slow or irregular readings, or a regular
+  confidence of 0.8: no gain in first-reading accuracy.
+- Golden readings from the test run (1.5.0rc1 copies kept as `*_v1.5.0rc1.json`).
+
 ## 1.5.0rc1 (2026-11-12), model hr_v10c, beat detector trained against finger taps (release candidate, device test pending)
 From the 1.4.0rc1 device test: finger taps still gave readings. With taps more varied than the
 training's tap model (ring 20-250 Hz, decay 5-80 ms, with or without a click and a press pulse,

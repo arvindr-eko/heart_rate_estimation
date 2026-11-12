@@ -11,20 +11,20 @@ algorithm; the C port (`c/`) is verified against it.
 <!-- begin:version -->
 | Version | Model | Generated | Commit | Runs |
 |---|---|---|---|---|
-| 1.5.0rc1 | hr_v10c | 2026-11-12 | b1d0aa8 | val `20261112_095437_hr_v10c_val_v1.5.0rc1`, test `20261112_095516_hr_v10c_test_v1.5.0rc1`, stress `20261112_095612_hr_v10c_test_v1.5.0rc1_stress` |
+| 1.5.0rc2 | hr_v10c | 2026-11-12 | 2f814e0 | val `20261112_112328_hr_v10c_val_v1.5.0rc2`, test `20261112_112408_hr_v10c_test_v1.5.0rc2`, stress `20261112_112506_hr_v10c_test_v1.5.0rc2_stress` |
 
 Key results, test split (703 recordings with a trusted ECG reference); all results in
 [docs/results.md](docs/results.md):
 
 | Result | Value |
 |---|---|
-| regular, 50-200 BPM: first reading, median / 90 % by | 2.75 s / 4 s |
-| regular: first reading within ±3 BPM; reading within ±3 BPM at 4 s | 88.6 %; 88.1 % |
+| regular, 50-200 BPM: first reading, median / 90 % by | 2.75 s / 4.25 s |
+| regular: first reading within ±3 BPM; reading within ±3 BPM at 4 s | 88.8 %; 79.2 % |
 | regular: converged (every later reading within ±3 BPM), median | 3 s |
-| slow, < 50 BPM: first reading, median; within ±10 BPM | 4 s; 100.0 % |
-| irregular or AF: first reading within ±10 BPM; within ±3 BPM at 9 s | 76.2 %; 77.0 % |
-| all: half/double readings; with a reading by 10 s | 0.3 %; 98.3 % |
-| targets met (test and stress) | 8 of 14 |
+| slow, < 50 BPM: first reading, median; within ±10 BPM | 5.25 s; 100.0 % |
+| irregular or AF: first reading within ±10 BPM; within ±3 BPM at 9 s | 77.0 %; 77.0 % |
+| all: half/double readings; with a reading by 10 s | 0.2 %; 97.9 % |
+| targets met (test and stress) | 6 of 14 |
 | C port: test recordings with the Python reading times | 825 of 825 |
 | C port, Cortex-M4: RAM of the state; stack, libm included; flash of code and constants without libm | 10,020 bytes (budget 10,240, within); 672 bytes (budget 1,024, within); 17,518 bytes (budget 5,120, exceeded) |
 <!-- end:version -->
@@ -50,7 +50,7 @@ Key results, test split (703 recordings with a trusted ECG reference); all resul
 - Input: 200 int16 PCG samples every 50 ms. Output: nothing, or a reading (time, BPM,
   confidence): the first one when the estimate is likely right, then one per second while a
   heartbeat is heard.
-- Regular rhythms at common rates: first reading after 2.75-4 s, aimed at ±3 BPM. Slow
+- Regular rhythms at common rates: first reading after 2.75-4.25 s, aimed at ±3 BPM. Slow
   (< 50 BPM) or irregular hearts: first reading from 3 s within ±10 BPM, then converging.
   Only heart sounds give readings: the network is trained to stay silent on speech, knocks,
   taps, rubbing and other sounds, and a learned presence gate must hold for 1 s before the first
@@ -127,7 +127,7 @@ Runtime settings (`configs/device.yml`, part 1; no retraining):
 | Setting | Effect | Default |
 |---|---|---|
 | `confidence` | Regular hearts: probability the first reading must have of being within ±3 BPM. Lower: sooner and less accurate. | 0.7 |
-| `slow_irregular_after_s` | Slow or irregular hearts: earliest first reading (probability within ±10 BPM of at least 0.97 until 4 s, then 0.9). | 3.0 s |
+| `slow_irregular_after_s` | Slow or irregular hearts: earliest first reading (probability within ±10 BPM of at least 0.97 until 4 s, then 0.95). | 3.0 s |
 | `latest_s` | With a heart sound present: a first reading at this time when the estimate is roughly certain (posterior mass of at least `forced_min_mass` within ±10 BPM). | 8.0 s |
 
 Their effect: [docs/results.md](docs/results.md) §10. Internal constants (rate range, slow

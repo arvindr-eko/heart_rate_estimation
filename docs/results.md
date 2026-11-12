@@ -9,7 +9,7 @@ the resources: [realtime_implementation.md](realtime_implementation.md).
 <!-- begin:results_header -->
 | Version | Model | Generated | Commit | Runs |
 |---|---|---|---|---|
-| 1.5.0rc1 | hr_v10c | 2026-11-12 | b1d0aa8 | val `20261112_095437_hr_v10c_val_v1.5.0rc1`, test `20261112_095516_hr_v10c_test_v1.5.0rc1`, stress `20261112_095612_hr_v10c_test_v1.5.0rc1_stress` |
+| 1.5.0rc2 | hr_v10c | 2026-11-12 | 2f814e0 | val `20261112_112328_hr_v10c_val_v1.5.0rc2`, test `20261112_112408_hr_v10c_test_v1.5.0rc2`, stress `20261112_112506_hr_v10c_test_v1.5.0rc2_stress` |
 <!-- end:results_header -->
 
 ## Contents
@@ -45,17 +45,17 @@ the resources: [realtime_implementation.md](realtime_implementation.md).
 | Metric | regular, 50-200 BPM | slow, < 50 BPM | irregular or AF | all | AF only |
 |---|---|---|---|---|---|
 | recordings | 438 | 30 | 235 | 703 | 15 |
-| first reading, median / 90 % by | 2.75 s / 4 s | 4 s / 5.75 s | 4 s / 7 s | 3 s / 5 s | 6.75 s / 11.5 s |
-| first reading within ±3 BPM | 88.6 % | 100.0 % | 51.9 % | 76.8 % | 46.7 % |
-| first reading within ±10 BPM | 99.8 % | 100.0 % | 76.2 % | 91.9 % | 80.0 % |
-| within ±3 BPM at 4 / 6 / 9 s | 88.1 % / 98.2 % / 98.9 % | 56.7 % / 93.3 % / 100.0 % | 36.2 % / 66.4 % / 77.0 % | 69.4 % / 87.3 % / 91.6 % | 20.0 % / 6.7 % / 20.0 % |
-| converged, median / 90 % by | 3 s / 4.5 s | 4 s / 5.75 s | 10 s / not reached | 4 s / 14.75 s | not reached / not reached |
-| half/double readings | 0.1 % | 0.0 % | 0.6 % | 0.3 % | 0.0 % |
-| mean absolute error; 95 % limits of agreement | 0.65; ±6.3 BPM | 0.38; ±1.0 BPM | 2.90; ±13.8 BPM | 1.34; ±9.2 BPM | 5.59; ±12.8 BPM |
-| bias (mean signed error) | -0.33 BPM | -0.02 BPM | -0.10 BPM | -0.24 BPM | +4.23 BPM |
+| first reading, median / 90 % by | 2.75 s / 4.25 s | 5.25 s / 8 s | 4 s / 8 s | 3 s / 6.25 s | 8.5 s / 13.25 s |
+| first reading within ±3 BPM | 88.8 % | 100.0 % | 55.3 % | 78.1 % | 40.0 % |
+| first reading within ±10 BPM | 99.8 % | 100.0 % | 77.0 % | 92.2 % | 66.7 % |
+| within ±3 BPM at 4 / 6 / 9 s | 79.2 % / 95.7 % / 98.9 % | 13.3 % / 70.0 % / 100.0 % | 30.6 % / 60.4 % / 77.0 % | 60.2 % / 82.8 % / 91.6 % | 13.3 % / 6.7 % / 13.3 % |
+| converged, median / 90 % by | 3 s / 5 s | 5.25 s / 8 s | 10 s / not reached | 4 s / 14.75 s | 16.5 s / not reached |
+| half/double readings | 0.1 % | 0.0 % | 0.5 % | 0.2 % | 0.0 % |
+| mean absolute error; 95 % limits of agreement | 0.65; ±6.4 BPM | 0.38; ±1.0 BPM | 2.76; ±13.3 BPM | 1.28; ±9.0 BPM | 5.08; ±12.2 BPM |
+| bias (mean signed error) | -0.33 BPM | -0.03 BPM | -0.12 BPM | -0.25 BPM | +3.50 BPM |
 
 Recordings without a trusted ECG (117): first reading within the EC13 tolerance of the production
-ECG HR (EFAST) in 98.3 %.
+ECG HR (EFAST) in 99.1 %.
 <!-- end:test -->
 
 ## 3. Targets
@@ -63,19 +63,19 @@ ECG HR (EFAST) in 98.3 %.
 | Group | Metric | Value | Target | Result |
 |---|---|---|---|---|
 | regular, 50-200 BPM | first reading, median | 2.75 s | 3 s | pass |
-| regular, 50-200 BPM | first reading, 90 % by | 4 s | 4 s | pass |
-| regular, 50-200 BPM | first reading within ±3 BPM | 88.6 % | 92.0 % | **fail** |
-| regular, 50-200 BPM | within ±3 BPM at 4 s | 88.1 % | 92.0 % | **fail** |
-| slow, < 50 BPM | first reading, median | 4 s | 5 s | pass |
+| regular, 50-200 BPM | first reading, 90 % by | 4.25 s | 4 s | **fail** |
+| regular, 50-200 BPM | first reading within ±3 BPM | 88.8 % | 92.0 % | **fail** |
+| regular, 50-200 BPM | within ±3 BPM at 4 s | 79.2 % | 92.0 % | **fail** |
+| slow, < 50 BPM | first reading, median | 5.25 s | 5 s | **fail** |
 | slow, < 50 BPM | first reading within ±10 BPM | 100.0 % | 95.0 % | pass |
 | slow, < 50 BPM | within ±3 BPM at 9 s | 100.0 % | 90.0 % | pass |
 | irregular or AF | first reading, median | 4 s | 6 s | pass |
-| irregular or AF | first reading within ±10 BPM | 76.2 % | 90.0 % | **fail** |
+| irregular or AF | first reading within ±10 BPM | 77.0 % | 90.0 % | **fail** |
 | irregular or AF | within ±3 BPM at 9 s | 77.0 % | 60.0 % | pass |
-| all | reading by 10 s | 98.3 % | 99.0 % | **fail** |
-| all | half/double readings | 0.3 % | 0.5 % | pass |
-| very fast | first reading within ±10 BPM | 81.9 % | 90.0 % | **fail** |
-| very fast | half/double readings | 5.9 % | 1.0 % | **fail** |
+| all | reading by 10 s | 97.9 % | 99.0 % | **fail** |
+| all | half/double readings | 0.2 % | 0.5 % | pass |
+| very fast | first reading within ±10 BPM | 82.2 % | 90.0 % | **fail** |
+| very fast | half/double readings | 5.1 % | 1.0 % | **fail** |
 <!-- end:targets -->
 
 ## 4. Time to converge
@@ -87,11 +87,11 @@ by more than 3 BPM. Right: share converged.
 <!-- begin:convergence -->
 | Group | Recordings | First reading, median | Converged: median / 75 % / 90 % by | Converged by 4 / 6 / 9 / 12 s | Not converged * |
 |---|---|---|---|---|---|
-| regular, 50-200 BPM | 438 | 2.75 s | 3 s / 4 s / 4.5 s | 86.3 % / 96.3 % / 97.7 % / 98.4 % | 0.7 % |
-| slow, < 50 BPM | 30 | 4 s | 4 s / 4.75 s / 5.75 s | 56.7 % / 93.3 % / 100.0 % / 100.0 % | 0.0 % |
-| irregular or AF | 235 | 4 s | 10 s / 15.5 s / not reached | 13.2 % / 35.7 % / 48.5 % / 62.6 % | 14.5 % |
-| all | 703 | 3 s | 4 s / 6 s / 14.75 s | 60.6 % / 76.0 % / 81.4 % / 86.5 % | 5.3 % |
-| AF only | 15 | 6.75 s | not reached / not reached / not reached | 0.0 % / 0.0 % / 6.7 % / 6.7 % | 53.3 % |
+| regular, 50-200 BPM | 438 | 2.75 s | 3 s / 4 s / 5 s | 77.6 % / 93.8 % / 97.7 % / 98.4 % | 0.7 % |
+| slow, < 50 BPM | 30 | 5.25 s | 5.25 s / 6.5 s / 8 s | 13.3 % / 70.0 % / 100.0 % / 100.0 % | 0.0 % |
+| irregular or AF | 235 | 4 s | 10 s / 15.5 s / not reached | 11.5 % / 31.5 % / 48.5 % / 61.7 % | 14.5 % |
+| all | 703 | 3 s | 4 s / 6.75 s / 14.75 s | 52.8 % / 72.0 % / 81.4 % / 86.2 % | 5.3 % |
+| AF only | 15 | 8.5 s | 16.5 s / not reached / not reached | 0.0 % / 0.0 % / 0.0 % / 0.0 % | 46.7 % |
 
 \* last reading of the 17 s recording outside ±3 BPM.
 
@@ -102,10 +102,10 @@ by more than 3 BPM. Right: share converged.
 <!-- begin:accuracy_over_time -->
 | Group | 2 s | 3 s | 4 s | 5 s | 6 s | 8 s | 9 s | 10 s |
 |---|---|---|---|---|---|---|---|---|
-| regular, 50-200 BPM | 12.6 % | 58.2 % | 88.1 % | 95.9 % | 98.2 % | 98.9 % | 98.9 % | 98.9 % |
-| slow, < 50 BPM | 0.0 % | 3.3 % | 56.7 % | 80.0 % | 93.3 % | 100.0 % | 100.0 % | 100.0 % |
-| irregular or AF | 4.3 % | 17.4 % | 36.2 % | 51.5 % | 66.4 % | 77.9 % | 77.0 % | 76.6 % |
-| all | 9.2 % | 42.2 % | 69.4 % | 80.4 % | 87.3 % | 91.9 % | 91.6 % | 91.5 % |
+| regular, 50-200 BPM | 12.6 % | 58.2 % | 79.2 % | 92.5 % | 95.7 % | 98.6 % | 98.9 % | 98.9 % |
+| slow, < 50 BPM | 0.0 % | 3.3 % | 13.3 % | 46.7 % | 70.0 % | 100.0 % | 100.0 % | 100.0 % |
+| irregular or AF | 4.3 % | 17.4 % | 30.6 % | 45.1 % | 60.4 % | 76.6 % | 77.0 % | 75.7 % |
+| all | 9.2 % | 42.2 % | 60.2 % | 74.7 % | 82.8 % | 91.3 % | 91.6 % | 91.2 % |
 
 ![Accuracy over time](figures/accuracy_over_time.png)
 <!-- end:accuracy_over_time -->
@@ -116,10 +116,10 @@ Absolute difference between the first reading and the ECG heart rate over the sa
 <!-- begin:first_error -->
 | Group | First readings | Median |error| (BPM) | 90th percentile | 95th percentile | Largest |
 |---|---|---|---|---|---|
-| regular, 50-200 BPM | 437 | 0.85 | 3.17 | 3.93 | 8.7 |
-| slow, < 50 BPM | 30 | 0.45 | 1.24 | 1.77 | 2.7 |
-| irregular or AF | 232 | 2.63 | 18.00 | 22.43 | 53.1 |
-| all | 699 | 1.02 | 7.50 | 12.92 | 53.1 |
+| regular, 50-200 BPM | 437 | 0.83 | 3.17 | 3.91 | 8.7 |
+| slow, < 50 BPM | 30 | 0.36 | 1.35 | 1.51 | 2.0 |
+| irregular or AF | 232 | 2.09 | 16.42 | 20.62 | 53.1 |
+| all | 699 | 0.99 | 6.90 | 12.77 | 53.1 |
 
 ![First-reading error](figures/first_error.png)
 <!-- end:first_error -->
@@ -131,42 +131,42 @@ Test recordings with a trusted ECG, by device, firmware, mains filter setting, r
 <!-- begin:strata -->
 | Stratum | Value | Recordings | First within ±3 BPM | First within ±10 BPM | First reading, median | Within ±3 BPM at 9 s |
 |---|---|---|---|---|---|---|
-| device | DUO3 | 703 | 76.8 % | 91.9 % | 3 s | 91.6 % |
-| firmware | 1.0.11 | 218 | 74.8 % | 90.4 % | 3.25 s | 92.2 % |
+| device | DUO3 | 703 | 78.1 % | 92.2 % | 3 s | 91.6 % |
+| firmware | 1.0.11 | 218 | 77.1 % | 91.3 % | 3.25 s | 92.2 % |
 | firmware | 1.0.12 | 1 | 0.0 % | 0.0 % | not reached | 0.0 % |
-| firmware | 1.0.4 | 6 | 83.3 % | 83.3 % | 4 s | 83.3 % |
+| firmware | 1.0.4 | 6 | 83.3 % | 83.3 % | 4.25 s | 100.0 % |
 | firmware | 1.0.7 | 3 | 100.0 % | 100.0 % | 2.75 s | 66.7 % |
-| firmware | 1.0.8 | 27 | 85.2 % | 88.9 % | 3 s | 88.9 % |
+| firmware | 1.0.8 | 27 | 81.5 % | 85.2 % | 3 s | 92.6 % |
 | firmware | 1.0.9 | 1 | 100.0 % | 100.0 % | 4 s | 100.0 % |
-| firmware | 1.1.1 | 104 | 80.8 % | 97.1 % | 2.5 s | 98.1 % |
-| firmware | 1.1.2 | 342 | 76.3 % | 92.1 % | 3.5 s | 90.4 % |
+| firmware | 1.1.1 | 104 | 81.7 % | 96.2 % | 2.5 s | 98.1 % |
+| firmware | 1.1.2 | 342 | 77.5 % | 92.7 % | 3.5 s | 89.8 % |
 | firmware | 1.2.0 | 1 | 0.0 % | 0.0 % | not reached | 0.0 % |
-| mains filter (Hz) | 50 | 22 | 68.2 % | 77.3 % | 3.5 s | 81.8 % |
-| mains filter (Hz) | 60 | 681 | 77.1 % | 92.4 % | 3 s | 91.9 % |
-| rhythm (EFAST class) | Atrial Fibrillation | 15 | 46.7 % | 80.0 % | 6.75 s | 20.0 % |
-| rhythm (EFAST class) | Normal Sinus Rhythm | 174 | 75.9 % | 92.0 % | 3.25 s | 96.6 % |
-| rhythm (EFAST class) | Sinus Bradycardia | 66 | 78.8 % | 86.4 % | 4 s | 89.4 % |
-| rhythm (EFAST class) | Sinus Tachycardia | 257 | 80.9 % | 95.7 % | 2.75 s | 98.8 % |
-| rhythm (EFAST class) | Unspecified Rhythm | 191 | 73.8 % | 89.5 % | 3.5 s | 83.8 % |
-| reference HR | 30-39 BPM | 4 | 100.0 % | 100.0 % | 4.5 s | 100.0 % |
-| reference HR | 40-49 BPM | 42 | 76.2 % | 81.0 % | 4.25 s | 88.1 % |
-| reference HR | 50-59 BPM | 43 | 76.7 % | 90.7 % | 4 s | 81.4 % |
-| reference HR | 60-69 BPM | 64 | 73.4 % | 85.9 % | 4 s | 90.6 % |
-| reference HR | 70-79 BPM | 51 | 76.5 % | 92.2 % | 3.25 s | 90.2 % |
-| reference HR | 80-89 BPM | 52 | 76.9 % | 94.2 % | 3.25 s | 90.4 % |
-| reference HR | 90-99 BPM | 60 | 70.0 % | 88.3 % | 3 s | 96.7 % |
-| reference HR | 100-109 BPM | 51 | 86.3 % | 94.1 % | 4 s | 90.2 % |
+| mains filter (Hz) | 50 | 22 | 72.7 % | 77.3 % | 3.5 s | 81.8 % |
+| mains filter (Hz) | 60 | 681 | 78.3 % | 92.7 % | 3 s | 91.9 % |
+| rhythm (EFAST class) | Atrial Fibrillation | 15 | 40.0 % | 66.7 % | 8.5 s | 13.3 % |
+| rhythm (EFAST class) | Normal Sinus Rhythm | 174 | 76.4 % | 92.0 % | 3.25 s | 96.6 % |
+| rhythm (EFAST class) | Sinus Bradycardia | 66 | 84.8 % | 90.9 % | 4.5 s | 89.4 % |
+| rhythm (EFAST class) | Sinus Tachycardia | 257 | 82.1 % | 96.1 % | 2.75 s | 98.8 % |
+| rhythm (EFAST class) | Unspecified Rhythm | 191 | 74.9 % | 89.5 % | 3.5 s | 84.3 % |
+| reference HR | 30-39 BPM | 4 | 100.0 % | 100.0 % | 5.5 s | 100.0 % |
+| reference HR | 40-49 BPM | 42 | 81.0 % | 83.3 % | 5.75 s | 90.5 % |
+| reference HR | 50-59 BPM | 43 | 79.1 % | 90.7 % | 4.25 s | 79.1 % |
+| reference HR | 60-69 BPM | 64 | 75.0 % | 87.5 % | 4 s | 90.6 % |
+| reference HR | 70-79 BPM | 51 | 78.4 % | 92.2 % | 3.25 s | 90.2 % |
+| reference HR | 80-89 BPM | 52 | 80.8 % | 96.2 % | 3.25 s | 90.4 % |
+| reference HR | 90-99 BPM | 60 | 66.7 % | 88.3 % | 3 s | 95.0 % |
+| reference HR | 100-109 BPM | 51 | 88.2 % | 96.1 % | 4 s | 90.2 % |
 | reference HR | 110-119 BPM | 53 | 81.1 % | 92.5 % | 3 s | 96.2 % |
 | reference HR | 120-129 BPM | 54 | 77.8 % | 94.4 % | 2.75 s | 92.6 % |
-| reference HR | 130-139 BPM | 49 | 61.2 % | 83.7 % | 3 s | 85.7 % |
-| reference HR | 140-149 BPM | 52 | 76.9 % | 96.2 % | 2.5 s | 92.3 % |
-| reference HR | 150-159 BPM | 56 | 85.7 % | 98.2 % | 2.5 s | 96.4 % |
+| reference HR | 130-139 BPM | 49 | 61.2 % | 77.6 % | 3 s | 85.7 % |
+| reference HR | 140-149 BPM | 52 | 78.8 % | 96.2 % | 2.5 s | 92.3 % |
+| reference HR | 150-159 BPM | 56 | 87.5 % | 98.2 % | 2.5 s | 98.2 % |
 | reference HR | 160-169 BPM | 34 | 79.4 % | 100.0 % | 2.5 s | 97.1 % |
-| reference HR | 170-179 BPM | 22 | 68.2 % | 95.5 % | 2.25 s | 95.5 % |
+| reference HR | 170-179 BPM | 22 | 72.7 % | 100.0 % | 2.25 s | 95.5 % |
 | reference HR | 180-189 BPM | 11 | 81.8 % | 100.0 % | 3 s | 90.9 % |
 | reference HR | 190-199 BPM | 5 | 100.0 % | 100.0 % | 3 s | 80.0 % |
-| efast_pcg_murmur_classification | No Structural Murmur | 591 | 76.6 % | 91.7 % | 3 s | 91.7 % |
-| efast_pcg_murmur_classification | Structural Murmur | 112 | 77.7 % | 92.9 % | 3 s | 91.1 % |
+| efast_pcg_murmur_classification | No Structural Murmur | 591 | 78.0 % | 91.9 % | 3 s | 91.5 % |
+| efast_pcg_murmur_classification | Structural Murmur | 112 | 78.6 % | 93.8 % | 3 s | 92.0 % |
 <!-- end:strata -->
 
 ## 8. Validation
@@ -176,12 +176,12 @@ estimate.
 <!-- begin:validation -->
 | Group | Recordings | First reading, median | First within ±3 BPM | First within ±10 BPM | Within ±3 BPM at 4 s | At 9 s | Half/double |
 |---|---|---|---|---|---|---|---|
-| regular, 50-200 BPM | 254 | 3 s | 88.6 % | 100.0 % | 84.3 % | 98.8 % | 0.4 % |
-| slow, < 50 BPM | 20 | 4.5 s | 100.0 % | 100.0 % | 35.0 % | 100.0 % | 0.0 % |
-| irregular or AF | 191 | 4 s | 59.2 % | 82.2 % | 44.0 % | 77.0 % | 0.9 % |
-| all | 465 | 3.25 s | 77.0 % | 92.7 % | 65.6 % | 89.9 % | 0.6 % |
+| regular, 50-200 BPM | 254 | 3 s | 89.4 % | 100.0 % | 73.2 % | 98.8 % | 0.4 % |
+| slow, < 50 BPM | 20 | 6 s | 100.0 % | 100.0 % | 25.0 % | 100.0 % | 0.0 % |
+| irregular or AF | 191 | 4 s | 63.9 % | 84.8 % | 37.2 % | 76.4 % | 0.9 % |
+| all | 465 | 3.25 s | 79.4 % | 93.8 % | 56.3 % | 89.7 % | 0.6 % |
 
-Targets met on validation: 6 of 12.
+Targets met on validation: 5 of 12.
 <!-- end:validation -->
 
 ## 9. Stress test
@@ -195,69 +195,69 @@ S1-band features at very fast rates.
 <!-- begin:stress -->
 | Family | Conditions | Recordings per condition | First within ±10 BPM | Within ±3 BPM at 9 s | Half/double |
 |---|---|---|---|---|---|
-| noise: white, friction, hum, breath at 0-20 dB SNR | 16 | 166 | 82.5 % - 93.4 % | 74.1 % - 93.4 % | 0.1 % - 0.2 % |
-| slow recordings under the same noise | 16 | 46 | 78.3 % - 89.1 % | 58.7 % - 91.3 % | 0.0 % - 0.6 % |
-| slowed to 32-44 BPM (clean, white noise 10 dB) | 6 | 40 | 97.5 % - 100.0 % | 97.5 % - 100.0 % | 0.0 % - 0.8 % |
-| sped up to 170-230 BPM | 8 | 40 | 92.5 % - 100.0 % | 90.0 % - 100.0 % | 0.0 % - 3.2 % |
-| sped up to 250 BPM | 2 | 40 | 80.0 % - 82.5 % | 75.0 % - 77.5 % | 3.8 % - 4.4 % |
-| sped up to 280-300 BPM | 4 | 40 | 52.5 % - 67.5 % | 20.0 % - 77.5 % | 8.8 % - 26.5 % |
+| noise: white, friction, hum, breath at 0-20 dB SNR | 16 | 166 | 82.5 % - 94.0 % | 71.7 % - 92.8 % | 0.0 % - 0.1 % |
+| slow recordings under the same noise | 16 | 46 | 71.7 % - 93.5 % | 37.0 % - 93.5 % | 0.0 % - 0.5 % |
+| slowed to 32-44 BPM (clean, white noise 10 dB) | 6 | 40 | 97.5 % - 100.0 % | 92.5 % - 100.0 % | 0.0 % - 0.9 % |
+| sped up to 170-230 BPM | 8 | 40 | 92.5 % - 100.0 % | 90.0 % - 97.5 % | 0.0 % - 3.2 % |
+| sped up to 250 BPM | 2 | 40 | 77.5 % - 82.5 % | 72.5 % - 75.0 % | 3.2 % - 4.7 % |
+| sped up to 280-300 BPM | 4 | 40 | 52.5 % - 72.5 % | 20.0 % - 75.0 % | 7.4 % - 24.4 % |
 
 <details><summary>All conditions</summary>
 
 | Condition | Recordings | First within ±10 BPM | Within ±3 BPM at 9 s | Half/double |
 |---|---|---|---|---|
-| noise_breath_0dB | 166 | 91.6 % | 89.8 % | 0.1 % |
-| noise_breath_10dB | 166 | 91.6 % | 92.8 % | 0.1 % |
-| noise_breath_20dB | 166 | 93.4 % | 91.0 % | 0.1 % |
-| noise_breath_5dB | 166 | 91.0 % | 91.6 % | 0.1 % |
-| noise_friction_0dB | 166 | 93.4 % | 83.7 % | 0.1 % |
-| noise_friction_10dB | 166 | 93.4 % | 93.4 % | 0.1 % |
+| noise_breath_0dB | 166 | 91.0 % | 89.8 % | 0.0 % |
+| noise_breath_10dB | 166 | 91.6 % | 92.2 % | 0.0 % |
+| noise_breath_20dB | 166 | 93.4 % | 91.0 % | 0.0 % |
+| noise_breath_5dB | 166 | 91.0 % | 92.2 % | 0.0 % |
+| noise_friction_0dB | 166 | 91.6 % | 81.3 % | 0.1 % |
+| noise_friction_10dB | 166 | 94.0 % | 92.8 % | 0.0 % |
 | noise_friction_20dB | 166 | 92.8 % | 92.2 % | 0.1 % |
-| noise_friction_5dB | 166 | 90.4 % | 87.3 % | 0.2 % |
-| noise_hum_0dB | 166 | 82.5 % | 74.1 % | 0.1 % |
-| noise_hum_10dB | 166 | 92.8 % | 88.0 % | 0.1 % |
-| noise_hum_20dB | 166 | 93.4 % | 91.0 % | 0.1 % |
-| noise_hum_5dB | 166 | 89.2 % | 84.9 % | 0.2 % |
-| noise_white_0dB | 166 | 88.6 % | 89.2 % | 0.1 % |
-| noise_white_10dB | 166 | 92.8 % | 92.8 % | 0.1 % |
-| noise_white_20dB | 166 | 90.4 % | 89.2 % | 0.1 % |
-| noise_white_5dB | 166 | 90.4 % | 91.6 % | 0.1 % |
+| noise_friction_5dB | 166 | 89.8 % | 87.3 % | 0.1 % |
+| noise_hum_0dB | 166 | 82.5 % | 71.7 % | 0.1 % |
+| noise_hum_10dB | 166 | 91.6 % | 88.0 % | 0.0 % |
+| noise_hum_20dB | 166 | 92.8 % | 92.2 % | 0.0 % |
+| noise_hum_5dB | 166 | 89.8 % | 84.3 % | 0.1 % |
+| noise_white_0dB | 166 | 88.0 % | 88.0 % | 0.0 % |
+| noise_white_10dB | 166 | 93.4 % | 92.8 % | 0.0 % |
+| noise_white_20dB | 166 | 90.4 % | 89.8 % | 0.0 % |
+| noise_white_5dB | 166 | 89.8 % | 90.4 % | 0.1 % |
 | rate_clean_170bpm | 40 | 97.5 % | 95.0 % | 0.0 % |
-| rate_clean_190bpm | 40 | 92.5 % | 92.5 % | 2.8 % |
+| rate_clean_190bpm | 40 | 95.0 % | 92.5 % | 2.6 % |
 | rate_clean_210bpm | 40 | 97.5 % | 97.5 % | 0.0 % |
-| rate_clean_230bpm | 40 | 100.0 % | 100.0 % | 0.3 % |
-| rate_clean_250bpm | 40 | 80.0 % | 77.5 % | 4.4 % |
-| rate_clean_280bpm | 40 | 67.5 % | 75.0 % | 13.5 % |
-| rate_clean_300bpm | 40 | 60.0 % | 30.0 % | 22.6 % |
-| rate_clean_32bpm | 40 | 97.5 % | 100.0 % | 0.8 % |
+| rate_clean_230bpm | 40 | 100.0 % | 97.5 % | 0.0 % |
+| rate_clean_250bpm | 40 | 77.5 % | 75.0 % | 4.7 % |
+| rate_clean_280bpm | 40 | 72.5 % | 75.0 % | 9.0 % |
+| rate_clean_300bpm | 40 | 62.5 % | 30.0 % | 18.7 % |
+| rate_clean_32bpm | 40 | 97.5 % | 92.5 % | 0.9 % |
 | rate_clean_38bpm | 40 | 100.0 % | 100.0 % | 0.0 % |
 | rate_clean_44bpm | 40 | 97.5 % | 100.0 % | 0.8 % |
 | rate_white_10dB_170bpm | 40 | 97.5 % | 92.5 % | 0.0 % |
 | rate_white_10dB_190bpm | 40 | 92.5 % | 90.0 % | 3.2 % |
-| rate_white_10dB_210bpm | 40 | 97.5 % | 97.5 % | 0.0 % |
+| rate_white_10dB_210bpm | 40 | 95.0 % | 95.0 % | 0.0 % |
 | rate_white_10dB_230bpm | 40 | 97.5 % | 95.0 % | 2.2 % |
-| rate_white_10dB_250bpm | 40 | 82.5 % | 75.0 % | 3.8 % |
-| rate_white_10dB_280bpm | 40 | 65.0 % | 77.5 % | 8.8 % |
-| rate_white_10dB_300bpm | 40 | 52.5 % | 20.0 % | 26.5 % |
-| rate_white_10dB_32bpm | 40 | 97.5 % | 97.5 % | 0.2 % |
+| rate_white_10dB_250bpm | 40 | 82.5 % | 72.5 % | 3.2 % |
+| rate_white_10dB_280bpm | 40 | 65.0 % | 75.0 % | 7.4 % |
+| rate_white_10dB_300bpm | 40 | 52.5 % | 20.0 % | 24.4 % |
+| rate_white_10dB_32bpm | 40 | 97.5 % | 95.0 % | 0.2 % |
 | rate_white_10dB_38bpm | 40 | 97.5 % | 100.0 % | 0.2 % |
 | rate_white_10dB_44bpm | 40 | 97.5 % | 100.0 % | 0.4 % |
-| slow_breath_0dB | 46 | 80.4 % | 84.8 % | 0.2 % |
-| slow_breath_10dB | 46 | 89.1 % | 84.8 % | 0.0 % |
+| slow_breath_0dB | 46 | 87.0 % | 80.4 % | 0.0 % |
+| slow_breath_10dB | 46 | 89.1 % | 82.6 % | 0.0 % |
 | slow_breath_20dB | 46 | 87.0 % | 87.0 % | 0.0 % |
-| slow_breath_5dB | 46 | 89.1 % | 82.6 % | 0.6 % |
-| slow_friction_0dB | 46 | 78.3 % | 58.7 % | 0.0 % |
-| slow_friction_10dB | 46 | 89.1 % | 87.0 % | 0.0 % |
-| slow_friction_20dB | 46 | 84.8 % | 87.0 % | 0.0 % |
-| slow_friction_5dB | 46 | 89.1 % | 69.6 % | 0.0 % |
-| slow_hum_0dB | 46 | 87.0 % | 71.7 % | 0.0 % |
-| slow_hum_10dB | 46 | 84.8 % | 87.0 % | 0.0 % |
-| slow_hum_20dB | 46 | 84.8 % | 91.3 % | 0.2 % |
-| slow_hum_5dB | 46 | 80.4 % | 82.6 % | 0.4 % |
-| slow_white_0dB | 46 | 80.4 % | 82.6 % | 0.4 % |
+| slow_breath_5dB | 46 | 93.5 % | 80.4 % | 0.4 % |
+| slow_friction_0dB | 46 | 71.7 % | 37.0 % | 0.0 % |
+| slow_friction_10dB | 46 | 91.3 % | 78.3 % | 0.0 % |
+| slow_friction_20dB | 46 | 87.0 % | 87.0 % | 0.0 % |
+| slow_friction_5dB | 46 | 87.0 % | 52.2 % | 0.0 % |
+| slow_hum_0dB | 46 | 84.8 % | 65.2 % | 0.0 % |
+| slow_hum_10dB | 46 | 87.0 % | 84.8 % | 0.0 % |
+| slow_hum_20dB | 46 | 89.1 % | 93.5 % | 0.0 % |
+| slow_hum_5dB | 46 | 82.6 % | 80.4 % | 0.5 % |
+| slow_white_0dB | 46 | 89.1 % | 80.4 % | 0.2 % |
 | slow_white_10dB | 46 | 82.6 % | 91.3 % | 0.4 % |
-| slow_white_20dB | 46 | 87.0 % | 78.3 % | 0.2 % |
-| slow_white_5dB | 46 | 84.8 % | 87.0 % | 0.2 % |
+| slow_white_20dB | 46 | 84.8 % | 78.3 % | 0.0 % |
+| slow_white_5dB | 46 | 93.5 % | 82.6 % | 0.0 % |
 
 </details>
 <!-- end:stress -->
@@ -269,10 +269,10 @@ settings at their defaults): lower is sooner and less accurate.
 <!-- begin:tradeoff -->
 | confidence | First reading, median | 90 % by | First within ±3 BPM | Within ±3 BPM at 4 s |
 |---|---|---|---|---|
-| 0.6 | 3 s | 4.25 s | 88.6 % | 84.6 % |
-| 0.65 | 3 s | 4.25 s | 88.6 % | 84.6 % |
-| 0.7 (default) | 3 s | 4.25 s | 88.6 % | 84.3 % |
-| 0.8 | 3 s | 4.25 s | 88.6 % | 83.5 % |
+| 0.6 | 3 s | 4.75 s | 89.4 % | 73.6 % |
+| 0.65 | 3 s | 4.75 s | 89.4 % | 73.6 % |
+| 0.7 (default) | 3 s | 4.75 s | 89.4 % | 73.2 % |
+| 0.8 | 3 s | 5 s | 89.4 % | 72.4 % |
 <!-- end:tradeoff -->
 
 ## 11. Corner cases

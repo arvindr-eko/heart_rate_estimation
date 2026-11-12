@@ -81,7 +81,7 @@ decision:                                  # block F, internal (re-validate when
   min_s: 1.5                               # no reading before this time
   slow_bpm: 50                             # below: slow path
   regular_max_cv: 0.10                     # picked-beat interval CV at or above: irregular path
-  slow_irregular_confidence: 0.9           # slow/irregular path: probability within ±10 BPM
+  slow_irregular_confidence: 0.95          # slow/irregular path: probability within ±10 BPM
   slow_irregular_early_confidence: 0.97    # slow/irregular path before slow_irregular_relaxed_s:
   slow_irregular_relaxed_s: 4.0            # this probability within ±10 BPM is needed
   conf_fine_bpm: 4.0                       # confidence of a regular reading: mass within ±4 BPM
