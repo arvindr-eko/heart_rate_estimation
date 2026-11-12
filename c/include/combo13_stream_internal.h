@@ -19,14 +19,14 @@
  * intentional; see INTEGRATION_NOTES.md at the top of this kit for the full writeup.
  *
  *   *** REQUIRES FIRMWARE-SIDE CHANGE ***  TICK_S (combo13_stream.c) is now 0.5s, not 0.25s.
- *   c13stream_tick() must be called once per 500ms of pushed audio, not 250ms -- query
+ *   hr_calculate() must be called once per 500ms of pushed audio, not 250ms -- query
  *   c13stream_tick_s() at startup rather than hardcoding either value (see combo13_stream.h).
  *   This is a BREAKING change from every prior revision's calling cadence and must be coordinated
  *   with the firmware adapter (c13_hr.c, not in this kit) before this drop is integrated.
  *
  *   2. DEC_STRIDE 10->12 (decimated rate 400Hz->333.333Hz), S_LEN 96->80 lag bins, morphology
  *      templates re-baked for the new lag grid (autocorr_templates.h/autocorr_templates_detrended.h).
- *      STATE_SIZE_BYTES drops accordingly (see c13stream_state_size()). A small, disclosed
+ *      STATE_SIZE_BYTES drops accordingly (see hr_state_size()). A small, disclosed
  *      accuracy-for-resources tradeoff (-0.35pp on the 314-file corpus vs. 0.12), not a bug.
  * ================================================================================================ */
 /* ================================================================================================
@@ -44,7 +44,7 @@
  *         30-40 BPM bucket, then every 5 BPM 40..200) instead of 28 buckets 45..190.
  *
  *   STATE SIZE grows (S_LEN 80 -> 126, EXT_S_LEN 207 -> 283): the adapter already mallocs
- *   c13stream_state_size(), so nothing else to change. TICK_S (0.5s) and the public API are unchanged.
+ *   hr_state_size(), so nothing else to change. TICK_S (0.5s) and the public API are unchanged.
  * ================================================================================================ */
 #define COMBO13_VERSION "0.16"
 
@@ -189,11 +189,11 @@ typedef union StackScratch {
   TickScratch_t tick;
 } StackScratch_t;
 
-typedef struct Combo13StreamState {
-  float el; /* elapsed time, seconds, since c13stream_init */
+typedef struct hr_state {
+  float el; /* elapsed time, seconds, since hr_init */
 
   /* -- onset debounce (kept for completeness; no longer gates any timing decision below since
-   * SIGNAL_ONSET_THRESH only ever rejects true digital silence -- see c13stream_tick()) -- */
+   * SIGNAL_ONSET_THRESH only ever rejects true digital silence -- see hr_calculate()) -- */
   bool sig_was_onset_ok;
   int onset_off_streak;
   int onset_on_streak;
@@ -217,7 +217,7 @@ typedef struct Combo13StreamState {
   float prev_last_event_el;
   float frozen_wait_s;
 
-  /* 1.0f/powf(LO_LAG+i, LAG_POW) for every lag bin, precomputed once in c13stream_init() since
+  /* 1.0f/powf(LO_LAG+i, LAG_POW) for every lag bin, precomputed once in hr_init() since
    * LAG_POW is a fixed compile-time constant -- avoids a powf() call per lag bin, per candidate,
    * every tick (the autocorrelation weighting is applied at 3 call sites). */
   float lag_pow_recip[S_LEN];
@@ -278,7 +278,7 @@ typedef struct Combo13StreamState {
    * later by the harmonic veto), so it can't share memory with the general scratch pool below. */
   float scratch_sumenv[FEAT_MAX];
 
-  /* General-purpose scratch, reused strictly sequentially within one c13stream_tick() call by
+  /* General-purpose scratch, reused strictly sequentially within one hr_calculate() call by
    * whichever stage currently needs a FEAT_MAX-sized workspace (band gathering, autocorrelation
    * products, flux trace, flatline peak-mean scan). Each use fully consumes its result before the
    * next stage starts, so one shared buffer replaces what would otherwise be several same-sized
@@ -301,13 +301,13 @@ typedef struct Combo13StreamState {
    * features feat_norm_clip just left in scratch_shared) -- liveness re-traced against v0.14's own
    * call graph (broad_env's 3 call sites -- sig-level, peak-mean/flatline, envelope_flux -- and
    * the r_adaptive preview all still pass/use st->scratch_shared exactly as in 0.12, and the two
-   * buffers' call sites remain non-overlapping, sequential blocks within c13stream_tick(); this
+   * buffers' call sites remain non-overlapping, sequential blocks within hr_calculate(); this
    * proof was re-verified against v0.14's structure, not copied blind).
    * NOT in the upstream project -- sync before the next revision drop. */
   float scratch_feat[FEAT_MAX];
 
   StackScratch_t stack;
 
-} Combo13StreamState_t;
+} hr_state_t;
 
 #endif /* COMBO13_STREAM_INTERNAL_H */

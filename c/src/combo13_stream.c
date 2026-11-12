@@ -17,13 +17,13 @@
  *      estimate, and its own morphology-template score.
  *
  * *** Ticks run at TICK_S=0.5s of elapsed audio (revision 0.14; was 0.25s through revision 0.13) ***
- * -- c13stream_push() may be called with any number of samples at any cadence in between, but
- * c13stream_tick() must be called once per TICK_S seconds of pushed audio. Query c13stream_tick_s()
- * rather than hardcoding either value -- see combo13_stream.h and INTEGRATION_NOTES.md. This is a
+ * -- hr_push_data() may be called with any number of samples at any cadence in between, but
+ * hr_calculate() must be called once per TICK_S seconds of pushed audio. Query c13stream_tick_s()
+ * rather than hardcoding either value -- see hr.h and INTEGRATION_NOTES.md. This is a
  * BREAKING change in calling cadence from every prior revision and requires a firmware-side update.
  */
 
-#include "combo13_stream.h"
+#include "hr.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -49,7 +49,7 @@ static const float LAG_POW = 0.2f;
 
 static const float FLUX_CLIP = 4.5f; /* z-score clip for the envelope-flux feature, matches FEAT_CLIP */
 
-/* -- onset debounce (see c13stream_tick() for why this no longer gates event timing) -- */
+/* -- onset debounce (see hr_calculate() for why this no longer gates event timing) -- */
 static const float SIGNAL_ONSET_THRESH = 0.00021f;
 static const int ONSET_DEBOUNCE_TICKS = 2; /* 1.0s intended debounce duration at TICK_S=0.5s */
 
@@ -430,7 +430,7 @@ static inline void declick_clip(float *buf, int n, float scale, float mult)
  * into a ring buffer at frame rate. Every feature extractor below just gathers trailing frames from
  * these rings -- no raw filtering is repeated per tick.
  * ================================================================================================ */
-static void stream_dec_samples(Combo13StreamState_t *st, const float *samples, int n)
+static void stream_dec_samples(hr_state_t *st, const float *samples, int n)
 {
   for (int i = 0; i < n; i++) {
     if (st->dec_sample_count < DEC_MAX) {
@@ -459,7 +459,7 @@ static void stream_dec_samples(Combo13StreamState_t *st, const float *samples, i
   }
 }
 
-static inline void band_env_gather_trailing(const Combo13StreamState_t *st, int band_idx, int m, float *out)
+static inline void band_env_gather_trailing(const hr_state_t *st, int band_idx, int m, float *out)
 {
   int start = ((st->band_env_ring_head - m) % FEAT_MAX + FEAT_MAX) % FEAT_MAX;
   for (int i = 0; i < m; i++) {
@@ -468,7 +468,7 @@ static inline void band_env_gather_trailing(const Combo13StreamState_t *st, int 
 }
 
 /* Gathers the trailing `win_n/FRAME_DS` envelope frames for one band, z-scores and clips them. */
-static int feat_norm_clip(Combo13StreamState_t *st, int win_n, int band_idx, float clip, float *out)
+static int feat_norm_clip(hr_state_t *st, int win_n, int band_idx, float clip, float *out)
 {
   int m = win_n / FRAME_DS;
   band_env_gather_trailing(st, band_idx, m, out);
@@ -499,7 +499,7 @@ static int feat_norm_clip(Combo13StreamState_t *st, int win_n, int band_idx, flo
 /* Sum of the 3 bands' z-scored+clipped envelopes -- the feature the main candidate's autocorrelation
  * runs on. Accumulates one band at a time into the caller's `out[]` so only one FEAT_MAX-sized
  * scratch buffer is ever needed for the other two bands, not two live at once. */
-static int sum_env_norm(Combo13StreamState_t *st, int win_n, float clip, float *out)
+static int sum_env_norm(hr_state_t *st, int win_n, float clip, float *out)
 {
   feat_norm_clip(st, win_n, 2, clip, out);
   int m = feat_norm_clip(st, win_n, 0, clip, st->scratch_shared);
@@ -515,7 +515,7 @@ static int sum_env_norm(Combo13StreamState_t *st, int win_n, float clip, float *
 
 /* Unnormalized summed envelope -- used by the onset/signal-level check and the flatline detector,
  * both of which care about absolute signal level, not a z-scored shape. */
-static int broad_env(Combo13StreamState_t *st, int win_n, float *out)
+static int broad_env(hr_state_t *st, int win_n, float *out)
 {
   int m = win_n / FRAME_DS;
   band_env_gather_trailing(st, 0, m, out);
@@ -534,7 +534,7 @@ static int broad_env(Combo13StreamState_t *st, int win_n, float *out)
 /* Envelope flux: rectified first difference of the raw summed envelope, z-scored+clipped. An
  * independent second signal (derived from onset-strength rather than periodicity of level) that
  * the settling and combine stages check the main candidate against. out[0]'s diff is defined as 0. */
-static int envelope_flux(Combo13StreamState_t *st, int win_n, float *out)
+static int envelope_flux(hr_state_t *st, int win_n, float *out)
 {
   int m = broad_env(st, win_n, out);
   if (m == 0) {
@@ -578,7 +578,7 @@ static int envelope_flux(Combo13StreamState_t *st, int win_n, float *out)
  * that survived the earlier artifact removal. `S` is accumulated into (not overwritten), so
  * multiple calls can build up a shared curve; `st->scratch_shared` is reused as scratch here since
  * whatever called this has already fully consumed its own use of it by this point. */
-static void add_autocorr_robust(Combo13StreamState_t *st, float *S, const float *f, int T, int lo, int hi,
+static void add_autocorr_robust(hr_state_t *st, float *S, const float *f, int T, int lo, int hi,
                                 float trim_frac)
 {
   if (T <= hi) {
@@ -638,7 +638,7 @@ static inline void add_autocorr_plain(float *S, const float *f, int T, int lo, i
 /* Main-candidate estimate: autocorrelates the summed normalized envelope over `win_n` decimated
  * samples, applies the lag^-LAG_POW weighting, min-subtracts (so the curve floors at 0), and picks
  * the tallest peak. Returns invalid if there isn't yet enough history for a 3-second minimum window. */
-static EstimateResult_t *estimate_sumenv_robust(Combo13StreamState_t *st, int win_n, float trim_frac, float feat_clip,
+static EstimateResult_t *estimate_sumenv_robust(hr_state_t *st, int win_n, float trim_frac, float feat_clip,
                                                 EstimateResult_t *r)
 {
   r->valid = false;
@@ -724,7 +724,7 @@ static inline float moving_average_at(const float *csum, int n, int i, int half_
 /* Detrends win_r's curve by subtracting a local moving average (+-half_width lag bins), which
  * suppresses the curve's own slow trend so a genuine periodicity peak stands out from a broad
  * hump. Re-picks the tallest peak of the detrended curve as the candidate bpm. */
-static EstimateResult_t *estimate_detrend_from_mw(Combo13StreamState_t *st, const EstimateResult_t *win_r,
+static EstimateResult_t *estimate_detrend_from_mw(hr_state_t *st, const EstimateResult_t *win_r,
                                                   int half_width, EstimateResult_t *out)
 {
   out->valid = false;
@@ -1186,7 +1186,7 @@ static bool template_match_gated_pick_v2(const EstimateResult_t *win_r, const Es
  * instead, this peak should still show up as a local max in the raw (undetrended) curve, extended
  * out to hi_ext. Returns 1 (confirmed), 0 (vetoed), or -1 (not evaluated: invalid input or not
  * enough history). */
-static int check_harmonic_confirmed(Combo13StreamState_t *st, int hist_len, int win_nsamp, bool cand_valid,
+static int check_harmonic_confirmed(hr_state_t *st, int hist_len, int win_nsamp, bool cand_valid,
                                     float cand_bpm, const float *precomputed_feat, int precomputed_m,
                                     float robust_trim_frac)
 {
@@ -1357,8 +1357,8 @@ static inline int required_teal_delay_ticks(float bpm, float time_since_wait_end
  * interpolate, declick clip, both baselines updated from the raw pre-cleaning chunk), then feeds
  * the newly-cleaned chunk into the per-band envelope pipeline and shifts the tail into the carry
  * region for next time. Operates on st->dec_chunk_buf; called once per full chunk accumulated by
- * c13stream_push(). */
-static void process_and_emit_chunk(Combo13StreamState_t *st, int samples)
+ * hr_push_data(). */
+static void process_and_emit_chunk(hr_state_t *st, int samples)
 {
   float *buf = st->dec_chunk_buf;
   int total = DEC_CARRY_N + samples;
@@ -1445,7 +1445,7 @@ static void process_and_emit_chunk(Combo13StreamState_t *st, int samples)
 
 /* Continuous anti-alias filter + stride-keep -- carries filter state across calls, never resets, so
  * it can be fed one sample or a whole buffer at a time with identical results. */
-static int streaming_decimate(Combo13StreamState_t *st, const float *samples, int n, float *out)
+static int streaming_decimate(hr_state_t *st, const float *samples, int n, float *out)
 {
   int m = 0;
   for (int i = 0; i < n; i++) {
@@ -1462,25 +1462,29 @@ static int streaming_decimate(Combo13StreamState_t *st, const float *samples, in
  * PUBLIC API
  * ================================================================================================ */
 
-uint32_t c13stream_state_size(void)
+uint32_t hr_state_size(void)
 {
-  return (uint32_t)sizeof(Combo13StreamState_t);
+  return (uint32_t)sizeof(hr_state_t);
 }
 
-const char *c13stream_version(void)
+const char *hr_version(void)
 {
   return COMBO13_VERSION;
 }
 
-float c13stream_tick_s(void)
+const char *hr_model_id(void)
 {
-  return TICK_S;
+  return "combo13 stream";
 }
 
-void c13stream_init(Combo13StreamState_t *st)
+void hr_default_settings(hr_settings_t *settings)
+{
+}
+
+hr_result_t hr_init(hr_state_t *st, const hr_settings_t *settings)
 {
   if (NULL == st) {
-    return;
+    return HR_ERR_ARG;
   }
 
   memset(st, 0, sizeof(*st));
@@ -1503,11 +1507,13 @@ void c13stream_init(Combo13StreamState_t *st)
     st->cons_buf_log[i].valid = false;
     st->agree_log[i].valid = false;
   }
+
+  return HR_OK;
 }
 
 #define PUSH_DECIMATE_SAMPLES 1
 
-bool c13stream_push(Combo13StreamState_t *st, const int16_t *samples, int n)
+bool hr_push_data(hr_state_t *st, const int16_t *samples, int n)
 {
   bool result = false;
   int chunk_len = st->dec_chunk_len;
@@ -1538,7 +1544,7 @@ bool c13stream_push(Combo13StreamState_t *st, const int16_t *samples, int n)
   return result;
 }
 
-int c13stream_process_chunk(Combo13StreamState_t *st)
+int hr_process_chunk(hr_state_t *st)
 {
   if (NULL == st) {
     return 0;
@@ -1550,7 +1556,7 @@ int c13stream_process_chunk(Combo13StreamState_t *st)
   return st->dec_chunk_len;
 }
 
-int c13stream_update_chunk(Combo13StreamState_t *st)
+int hr_update_chunk(hr_state_t *st)
 {
   if (NULL == st) {
     return 0;
@@ -1565,8 +1571,8 @@ int c13stream_update_chunk(Combo13StreamState_t *st)
 }
 
 /* Appends one tick's outcome to the trailing candidate log (a fixed-depth ring), read back by the
- * weighted-median combine in c13stream_tick() below. */
-static void log_push(Combo13StreamState_t *st, bool val_valid, float val, bool conf_valid, float conf, bool agree_valid,
+ * weighted-median combine in hr_calculate() below. */
+static void log_push(hr_state_t *st, bool val_valid, float val, bool conf_valid, float conf, bool agree_valid,
                      float agree, bool tmpl_corr_valid, float tmpl_corr)
 {
   int i = st->log_head;
@@ -1584,15 +1590,18 @@ static void log_push(Combo13StreamState_t *st, bool val_valid, float val, bool c
   }
 }
 
-Combo13StreamTick_t *c13stream_tick(Combo13StreamState_t *st, Combo13StreamTick_t *out)
+int hr_calculate(hr_state_t *st, hr_reading_t *out)
 {
-  if (NULL == st || NULL == out) {
-    return out;
+  float el = st->el;
+
+  if (NULL == st) {
+    return HR_ERR_ARG;
   }
 
-  memset(out, 0, sizeof(*out));
-  float el = st->el;
-  out->t = el;
+  if (NULL != out) {
+    memset(out, 0, sizeof(*out));
+    out->t_s = el;
+  }
 
   int hist_len = st->dec_sample_count;
 
@@ -2002,17 +2011,19 @@ Combo13StreamTick_t *c13stream_tick(Combo13StreamState_t *st, Combo13StreamTick_
   bool weighted_med_valid = count > 0;
   float weighted_med = weighted_med_valid ? weighted_median(vals, weights, count) : 0.0f;
 
-  out->is_flatline = is_flatline;
-  out->bpm_valid = (!is_flatline) && weighted_med_valid;
-  out->bpm = out->bpm_valid ? weighted_med : 0.0f;
-  out->raw_candidate_valid = raw_cand_valid;
-  out->raw_candidate_bpm = raw_cand_valid ? raw_cand_bpm : 0.0f;
-  out->harmonic_confirmed = harmonic_confirmed;
+  if (NULL != out) {
+    out->is_flatline = is_flatline;
+    out->bpm_valid = (!is_flatline) && weighted_med_valid;
+    out->bpm = out->bpm_valid ? weighted_med : 0.0f;
+    out->raw_candidate_valid = raw_cand_valid;
+    out->raw_candidate_bpm = raw_cand_valid ? raw_cand_bpm : 0.0f;
+    out->harmonic_confirmed = harmonic_confirmed;
+  }
 
-  if (out->bpm_valid) {
+  if ((!is_flatline) && weighted_med_valid) {
     st->ever_displayed = true;
   }
 
   st->el += TICK_S;
-  return out;
+  return HR_OK;
 }

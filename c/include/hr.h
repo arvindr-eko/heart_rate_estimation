@@ -1,0 +1,143 @@
+/* Public API for the combo13 streaming heart-rate front end.
+ *
+ * Call sequence: hr3stream_init() once, then repeatedly hr_push_data() with newly-arrived raw
+ * audio samples followed by hr_calculate() every TICK_S seconds (0.5s as of revision 0.14 --
+ * see hr_tick_s() below, and INTEGRATION_NOTES.md at the top of this kit) of elapsed audio
+ * to get the current bpm estimate. See README.md for the full signal path and usage example.
+ */
+#ifndef HR_H
+#define HR_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum hr_result {
+    HR_OK = 0,
+    HR_ERR_ARG = -1                 /* NULL pointer or setting out of range */
+} hr_result_t;
+
+typedef enum hr_phase {
+    HR_PHASE_WARMUP = 0,            /* less than the minimum features window: no features,
+                                       the estimate is the tracker's prior; also the frame
+                                       that ended a measurement (restart) */
+    HR_PHASE_SEARCHING = 1,         /* estimate updated every frame, first reading not yet due */
+    HR_PHASE_READING = 2            /* first reading given; one reading per output period
+                                       while a heartbeat is heard */
+} hr_phase_t;
+
+typedef enum hr_path {
+    HR_PATH_REGULAR = 0,            /* regular rhythm at a common rate */
+    HR_PATH_SLOW_IRREGULAR = 1      /* estimate below HR_SLOW_BPM or irregular picked beats */
+} hr_path_t;
+
+typedef struct hr_settings {
+    float confidence;               /* regular hearts: probability within ±3 BPM required for
+                                       the first reading, (0, 1]; lower is sooner */
+    float slow_irregular_after_s;   /* slow or irregular hearts: earliest first reading, s */
+    float latest_s;                 /* heart sound present: first reading at this time when
+                                       the estimate is roughly certain, s */
+} hr_settings_t;
+
+typedef struct hr_reading {
+    float t_s;                      /* time since the measurement started (hr_init,
+                                       hr_reset or the automatic restart), s */
+    float bpm;                      /* heart rate, beats per minute */
+
+    /* ML specific readings */
+    float confidence;               /* calibrated probability of the frame's path */
+    uint8_t path;                   /* hr_path_t of the frame */
+    uint8_t first;                  /* 1 for the first reading of the measurement */
+
+    /* Combo13 specific readings */
+    bool bpm_valid;                 /* false while suppressed (settling, jump/delay guard) or flatline */
+    bool is_flatline;               /* true when no real signal is present (device off/disconnected) */
+    float raw_candidate_bpm;        /* this tick's own raw estimate, before combine-stage smoothing */
+    bool raw_candidate_valid;       /* false when the raw estimate was vetoed or not yet available */
+    int harmonic_confirmed;         /* 1=confirmed, 0=vetoed, -1=not evaluated this tick */
+} hr_reading_t;
+
+typedef struct hr_frame_info {      /* state of the latest frame (every HR_FRAME_BLOCKS blocks) */
+    float t_s;
+    float estimate_bpm;             /* tracker estimate, also before the first reading */
+    float frame_bpm;                /* best state of the frame alone; NaN without features */
+    float periodicity;              /* activation ACF at the estimate's period (gate) */
+    float activation_sd;            /* activation standard deviation over the window (gate) */
+    float interval_cv;              /* picked-beat interval CV; NaN when undefined */
+    float beat_bpm;                 /* beat-count heart rate; NaN when undefined */
+    float p_fine;                   /* probability within ±3 BPM (regular path) */
+    float p_rough;                  /* probability within ±10 BPM (slow/irregular path) */
+    uint8_t path;                   /* hr_path_t */
+    uint8_t phase;                  /* hr_phase_t */
+    uint8_t heart_present;          /* 1: periodicity >= HR_MIN_PERIODICITY and activation SD
+                                       >= HR_MIN_ACTIVATION_SD (the first-reading gates) */
+} hr_frame_info_t;
+
+/* Forward declaration */
+typedef struct hr_state hr_state_t;
+
+/* Defaults of configs/device.yml (readout). */
+void hr_default_settings(hr_settings_t *settings);
+
+/* Clear all state; settings NULL: defaults. HR_ERR_ARG on NULL state or invalid settings. */
+hr_result_t hr_init(hr_state_t *s, const hr_settings_t *settings);
+
+/* New measurement on request: clear all block states, keep the settings. Contact loss needs
+ * no call (automatic restart). */
+void hr_reset(hr_state_t *s);
+
+/* Validate and apply runtime settings; they take effect at the next frame. */
+hr_result_t hr_set_settings(hr_state_t *s, const hr_settings_t *settings);
+void hr_get_settings(const hr_state_t *s, hr_settings_t *settings);
+
+/* Add new data to the internal chunk buffers */
+bool hr_push_data(hr_state_t *st, const int16_t *samples, int n);
+
+/* Do any processing on the chunk within the block */
+int hr_process_chunk(hr_state_t *st);
+
+/* Update internal buffer pointers for the next chunk */
+int hr_update_chunk(hr_state_t *st);
+
+/* Process one block of samples; 1 and *out filled when a reading is due,
+ * else 0 (out may be NULL). */
+int hr_calculate(hr_state_t *st, hr_reading_t *out);
+
+/* Process one block of HR_BLOCK_SAMPLES samples; 1 and *out filled when a reading is due,
+ * else 0 (out may be NULL). */
+int hr_process_block(hr_state_t *s, const int16_t *pcm, hr_reading_t *out);
+
+/* Latest reading; 0 before the first reading. */
+int hr_get_reading(const hr_state_t *s, hr_reading_t *out);
+
+/* Latest frame: estimate, gates, rhythm, probabilities, phase. */
+void hr_get_frame_info(const hr_state_t *s, hr_frame_info_t *info);
+
+/* Posterior over the HR_N_STATES heart-rate states of the latest frame. */
+const float *hr_get_posterior(const hr_state_t *s);
+
+/* Software version (HR_VERSION, semantic versioning) and model name with weight checksums
+ * (HR_MODEL_ID). */
+const char *hr_version(void);
+const char *hr_model_id(void);
+
+/* sizeof(hr_state_t), for callers that allocate the state without the header (tests). */
+uint32_t hr_state_size(void);
+
+#ifdef HR_DEBUG
+/* Intermediate outputs of the latest block or frame, for comparison with the reference. */
+const float *hr_debug_band_energy(const hr_state_t *s);   /* [HR_N_BANDS][HR_ENV_PER_BLOCK] */
+const float *hr_debug_activation(const hr_state_t *s);    /* [HR_ENV_PER_BLOCK] */
+const float *hr_debug_features(const hr_state_t *s);      /* [HR_N_STATES][HR_N_IN] */
+const float *hr_debug_log_emission(const hr_state_t *s);  /* [HR_N_STATES] */
+int hr_debug_has_features(const hr_state_t *s);            /* features of the latest frame */
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* HR_H */
