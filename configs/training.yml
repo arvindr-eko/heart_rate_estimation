@@ -15,6 +15,8 @@ paths:
   models_dir: models                       # model files; released ones tracked in git
   cache_dir: output/cache
   golden_dir: output/golden                # frozen readings for the regression test
+  negatives: data/negatives/manifest.csv   # real non-heart sounds (hr-estimation prepare
+  negatives_raw: data/negatives/raw        # --negatives), from the corpora downloaded here
 
 data:
   reference_column: efast_ecg_heart_rate   # EFAST ECG HR; the consensus ECG HR replaces it
@@ -39,8 +41,14 @@ training:
     periodicity_window_s: [2.0, 4.0]       # loss window drawn per batch
     crop_s: 4.0                            # length of each training example
     batch: 32                              # examples per batch
-    epochs: 40                             # passes over the training set
+    epochs: 30                             # passes over the training set
     lr: 0.003                              # Adam learning rate
+    teacher: hr_v8                         # target activation: this model's TCN on the recording
+    distill_weight: 100.0                  # without added noise (MSE, x this weight), 0 on
+    noise_rows: 1500                       # noise-only rows (max_duration_s each, noise_kinds)
+    noise_kinds: [taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum,
+                  "real:speech", "real:voice", "real:impact", "real:rub", "real:alarm",
+                  "real:music"]               # kinds of the noise-only rows (target 0)
   scorer:
     positive_tol_rel: 0.03                 # target: states within 3 % of the target HR
     dense_until_s: 5.0                     # training frames every 0.25 s up to here,
@@ -69,7 +77,10 @@ augment:                                   # training split only
   p_jitter: 0.25                           # share of warps with per-beat jitter
   jitter_cv: [0.03, 0.15]                  # per-beat interval variation (irregular rhythm)
   p_noise: 0.8                             # share of copies with added noise
-  noise_types: [white, hum, breath]        # friction held out for the stress test
+  noise_types: [white, hum, breath, "real:speech", "real:voice", "real:impact", "real:rub",
+                "real:alarm", "real:music"]  # friction held out for the stress test; real:
+                                           # recorded sounds of the negatives manifest
+  eq_db: 6.0                               # real sounds: random EQ ±dB at each channel point
   snr_db: [0, 25]                          # noise level, uniform
   gain_db: [-12, 12]                       # gain of every copy, uniform
   p_tilt: 0.5                              # share of copies with spectral tilt
@@ -93,13 +104,40 @@ labels:                                    # ECG reference (offline; never an es
   min_intervals: 3                         # widened to hold at least 3 beat intervals
   unheard_ratio: 1.5                       # ECG HR >= 1.5x EFAST: beats not heard (own group)
 
+negatives:                                 # hr-estimation prepare --negatives
+  licences: [publicdomain/zero, licenses/by/]  # kept licences (URL parts): CC0, CC-BY; CC BY 4.0
+  speech_per_speaker: 6                    # LibriSpeech utterances per speaker
+  eval_share: 0.3                          # speakers and uploaders held out for evaluation
+  seed: 5
+  fsd50k_exclude: [Purr]                   # clips with these labels dropped
+  fsd50k_kinds:                            # FSD50K labels per kind; first matching kind wins
+    impact: [Knock, Tap, Thump_and_thud, Slam, Door, Sliding_door, Hammer, Wood,
+             Walk_and_footsteps, Run, Clapping, Finger_snapping, Drawer_open_or_close,
+             Cupboard_open_or_close, Typing, Computer_keyboard, Typewriter, Crack,
+             Coin_(dropping), Dishes_and_pots_and_pans, Cutlery_and_silverware, Chink_and_clink,
+             Tick, Tick-tock, Clock, Ratchet_and_pawl, Drum, Bass_drum, Snare_drum, Tabla,
+             Percussion]
+    rub: [Scratching_(performance_technique), Crumpling_and_crinkling, Tearing,
+          Zipper_(clothing), Packing_tape_and_duct_tape, Writing, Scissors, Sawing, Squeak,
+          Crushing, Whoosh_and_swoosh_and_swish, Keys_jangling, Hands]
+    voice: [Speech, Male_speech_and_man_speaking, Female_speech_and_woman_speaking,
+            Child_speech_and_kid_speaking, Conversation, Chatter, Human_voice, Laughter, Giggle,
+            Chuckle_and_chortle, Cough, Sneeze, Singing, Male_singing, Female_singing,
+            Whispering, Shout, Yell, Screaming, Crying_and_sobbing, Sigh, Gasp, Breathing,
+            Respiratory_sounds, Chewing_and_mastication, Speech_synthesizer]
+    alarm: [Alarm, Buzz, Doorbell, Ringtone, Telephone, Siren, Bell, Bicycle_bell, Chime,
+            Wind_chime, Vehicle_horn_and_car_horn_and_honking, Printer, Microwave_oven]
+    music: [Music, Musical_instrument]
+
 presence:                                  # learned heart-present gate (train.fit_presence)
   min_t_s: 2.0                             # frames from this time of a recording or clip
-  kinds: [taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum]
+  kinds: [taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum,
+          "real:speech", "real:voice", "real:impact", "real:rub", "real:alarm", "real:music"]
   clip_s: 20.0                             # no-heart clips: length, draws per kind
   clip_seeds: 30
   lift_kinds: {silence: 0.0, white: 1.0, friction: 1.0, taps: 2.0, handling: 2.0, scratch: 1.0,
-               speech: 1.0}                # lift-off noise and its level (x the heart signal SD)
+               speech: 1.0, "real:speech": 1.0, "real:impact": 2.0, "real:rub": 1.0}
+                                           # lift-off noise and its level (x the heart signal SD)
   lift_recordings: 120                     # training recordings spliced with each lift-off kind
   lift_at_s: 9.0                           # lift-off time and length
   off_s: 8.0
@@ -110,6 +148,22 @@ presence:                                  # learned heart-present gate (train.f
   alpha: 1.0e-3
   max_iter: 400
   seed: 17
+
+noise_eval:                                # hr-estimation noise-eval (evaluation negatives)
+  kinds: ["real:speech", "real:voice", "real:impact", "real:rub", "real:alarm", "real:music",
+          taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum]
+  clips: 20                                # no-heart clips per kind
+  clip_s: 20.0                             # length of each
+  records: 60                              # validation recordings (trusted ECG) for lift-offs
+  lift_kinds: {silence: 0.0, "real:speech": 1.0, "real:voice": 1.0, "real:impact": 2.0,
+               "real:rub": 1.0}            # lift-off noise and its level (x the heart signal SD)
+  lift_at_s: 9.0                           # lift-off time and length
+  off_s: 8.0
+  swap_at_s: 8.0                           # swap: one recording to here, then another whose
+  swap_min_delta_bpm: 15.0                 # reference HR differs by at least this
+  overlap_kinds: ["real:speech", "real:voice", "real:impact"]  # added to the whole recording
+  overlap_snr_db: [10.0, 0.0]              # in the 25-400 Hz band
+  seed: 23
 
 eval:
   fine_bpm: 3.0                            # accurate: within ±3 BPM of the ECG, same seconds

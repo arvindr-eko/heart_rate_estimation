@@ -257,8 +257,12 @@ static int frame(hr_state_t *s, hr_reading_t *out)
 /* Blocks A-C for one input block; the frame work every HR_FRAME_BLOCKS blocks. */
 int hr_process_block(hr_state_t *s, const int16_t pcm[HR_BLOCK_SAMPLES], hr_reading_t *out)
 {
-    float env[HR_N_BANDS][HR_ENV_PER_BLOCK];
-    hr_frontend_process(&s->fe, pcm, env);
+    float env[HR_FE_OUT][HR_ENV_PER_BLOCK];
+    /* scratch.score is free between frames: the front end's source signal */
+#if HR_N_STATES < HR_BLOCK_SAMPLES
+#error "scratch.score is too small for the front end's work buffer"
+#endif
+    hr_frontend_process(&s->fe, pcm, s->scratch.score, env);
     for (int e = 0; e < HR_ENV_PER_BLOCK; e++) {
         float band[HR_NET_IN], x[HR_NET_IN];
         for (int b = 0; b < HR_NET_IN; b++)
@@ -282,7 +286,7 @@ int hr_process_block(hr_state_t *s, const int16_t pcm[HR_BLOCK_SAMPLES], hr_read
 #endif
     }
 #ifdef HR_DEBUG
-    for (int b = 0; b < HR_N_BANDS; b++)
+    for (int b = 0; b < HR_FE_OUT; b++)
         for (int e = 0; e < HR_ENV_PER_BLOCK; e++)
             s->dbg_env[b][e] = env[b][e];
 #endif

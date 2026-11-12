@@ -18,7 +18,7 @@ void hr_quality_init(hr_quality_t *q)
 }
 
 /* One envelope sample (band log energies): update the band energy averages. */
-void hr_quality_update(hr_quality_t *q, const float env[HR_N_BANDS])
+void hr_quality_update(hr_quality_t *q, const float env[HR_FE_OUT])
 {
     const float low = expf(env[0]) + expf(env[1]), high = expf(env[3]);
     if (!q->set) {

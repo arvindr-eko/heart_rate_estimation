@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from device import features, readout, rhythm, tracker
+from device import features, frontend, readout, rhythm, tracker
 from training import augment, evaluate, labels
 
 
@@ -134,6 +134,55 @@ def test_tracker_estimate(cfg):
     trk.posterior = np.zeros(trk.hr.size)
     trk.posterior[100] = 1.0
     assert abs(tracker.estimate(trk) - trk.hr[100]) < 1e-3
+
+
+def _source_features(cfg: dict, x: np.ndarray) -> np.ndarray:
+    """Voicing and impulsiveness rows of the front end over a whole signal."""
+    fe = frontend.init(cfg)
+    out = np.hstack([frontend.process(fe, x[i:i + 200]) for i in range(0, x.size - 199, 200)])
+    return out[-2:]
+
+
+def test_voicing_and_impulsiveness(cfg):
+    """Voicing near 1 on pitched sounds (120 and 220 Hz harmonics), below 0.3 on S1 and S2
+    bursts (45 and 70 Hz); impulsiveness of a 2 ms click above that of S1."""
+    fs = 4000
+    t = np.arange(fs) / fs
+    vowel = sum(np.sin(2 * np.pi * 120 * k * t) / k for k in range(1, 8)) * 0.05
+    high = sum(np.sin(2 * np.pi * 220 * k * t) / k for k in range(1, 6)) * 0.05
+    s1 = np.zeros(fs)
+    s1[1000:1400] = np.hanning(400) * np.sin(2 * np.pi * 45 * np.arange(400) / fs)
+    s2 = np.zeros(fs)
+    s2[1000:1320] = np.hanning(320) * np.sin(2 * np.pi * 70 * np.arange(320) / fs)
+    click = np.zeros(fs)
+    click[2000:2008] = np.random.default_rng(0).standard_normal(8)
+    v = {name: _source_features(cfg, x.astype(np.float32))
+         for name, x in (("vowel", vowel), ("high", high), ("s1", s1), ("s2", s2),
+                         ("click", click))}
+    assert v["vowel"][0, 25:75].mean() > 0.95 and v["high"][0, 25:75].mean() > 0.95
+    assert v["s1"][0, 25:35].mean() < 0.3 and v["s2"][0, 25:33].mean() < 0.3
+    assert v["click"][1, 50] > v["s1"][1, 25:35].mean() + 0.2
+
+
+def test_voicing_against_loops():
+    """Voicing equals a plain-loop NCCF peak search on random blocks (forward lag pairs where
+    the block holds them, backward otherwise)."""
+    rng = np.random.default_rng(3)
+    lags = np.arange(10, 49)
+    for _ in range(5):
+        x = rng.standard_normal(200).astype(np.float32)
+        got = frontend.voicing(x, 40, lags)
+        for f in range(5):
+            s, ncc = f * 40, []
+            for lag in lags:
+                b0 = s + lag if s + 40 + lag <= 200 else s - lag
+                num = sum(float(x[s + i]) * float(x[b0 + i]) for i in range(40))
+                ea = sum(float(x[s + i]) ** 2 for i in range(40))
+                eb = sum(float(x[b0 + i]) ** 2 for i in range(40))
+                ncc.append(num / np.sqrt(ea * eb))
+            peaks = [ncc[k] for k in range(1, len(ncc) - 1)
+                     if ncc[k] > ncc[k - 1] and ncc[k] >= ncc[k + 1]]
+            assert abs(got[f] - max(0.0, max(peaks, default=0.0))) < 1e-5
 
 
 def test_time_warp(cfg):

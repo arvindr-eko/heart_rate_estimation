@@ -3,7 +3,10 @@
 Both train on the training split plus `augment.copies` augmented copies per recording.
 TCN: no beat labels. The biased autocorrelation of the network output over a random 2-4 s crop
 tail must peak at the target period (softmax over HR states, reward on states within
-positive_tol_rel).
+positive_tol_rel); and the output must match a target activation (MSE x distill_weight): the
+teacher TCN's (training.net.teacher) on the recording without the added noise, or 0 on
+noise-only rows (noise_rows clips of noise_kinds, real recorded sounds included). The
+teacher's weights start the network (inputs it does not have: zero weights).
 Scorer: per-state features from the estimator's own blocks A-C (one code path for training
 and streaming), multi-positive softmax over states.
 Targets: the ECG HR over the window the network or scorer sees (labels.window_hr) where the
@@ -45,42 +48,78 @@ def _tasks(rows: pd.DataFrame) -> list:
                     rows["beats"]))
 
 
-def load_row(cfg: dict, task: tuple) -> tuple[np.ndarray, float, np.ndarray | None]:
+def load_row(cfg: dict, task: tuple, with_noise: bool = True
+             ) -> tuple[np.ndarray, float, np.ndarray | None]:
     """Audio, reference HR and beat times (None without a trusted ECG) of one training row,
-    augmented when it carries a spec."""
+    augmented when it carries a spec (without its added noise unless with_noise)."""
     _, filename, ref_bpm, spec, beats = task
     audio = data.load_wav(cfg, filename)
     if spec is not None:
+        spec = spec if with_noise else {**spec, "noise": None}
         audio, ref_bpm, beats = augment.apply(cfg, audio, beats, ref_bpm, spec)
     return audio, ref_bpm, beats
 
 
 # TCN (block B)
 
-def _net_example(cfg: dict, task: tuple) -> tuple:
-    """Band log energies (n_bands, frames), reference HR and beat times of one row."""
-    audio, ref_bpm, beats = load_row(cfg, task)
+def net_inputs(cfg: dict, audio: np.ndarray) -> np.ndarray:
+    """Front-end values (frontend.process) of a whole signal, (n_inputs, frames)."""
     block = cfg["stream"]["block_samples"]
     fe = frontend.init(cfg)
-    x = np.hstack([frontend.process(fe, audio[i:i + block])
-                   for i in range(0, audio.size - block + 1, block)]).astype(np.float32)
-    return task[0], x, ref_bpm, beats
+    return np.hstack([frontend.process(fe, audio[i:i + block])
+                      for i in range(0, audio.size - block + 1, block)]).astype(np.float32)
+
+
+def teacher_activation(cfg: dict, x: np.ndarray) -> np.ndarray:
+    """Activation of the teacher TCN (training.net.teacher) over front-end values x: the
+    inputs it was trained with (its first layer's input count), streamed."""
+    teacher = cfg["training"]["net"]["teacher"]
+    w = net.load_weights(cfg["paths"]["models_dir"] / f"{teacher}_tcn.npz")
+    return net.process(net.init(cfg, w), x[: w["conv0_w"].shape[1]])[0]
+
+
+def _net_example(cfg: dict, task: tuple) -> tuple:
+    """TCN inputs (n_inputs, frames), target activation, reference HR and beat times of one
+    row: a training row (target: the teacher's activation without the row's added noise) or a
+    noise-only clip ("noise", kind, seed: target 0, no reference)."""
+    if task[0] == "noise":
+        n = int(cfg["data"]["max_duration_s"] * cfg["stream"]["fs_hz"])
+        audio = augment.no_heart_clip(cfg, task[1], n, np.random.default_rng(task[2]))
+        x = net_inputs(cfg, audio)
+        return x, np.zeros(x.shape[1], np.float32), np.nan, None
+    audio, ref_bpm, beats = load_row(cfg, task)
+    x = net_inputs(cfg, audio)
+    spec = task[3]
+    clean = (x if spec is None or spec["noise"] is None
+             else net_inputs(cfg, load_row(cfg, task, with_noise=False)[0]))
+    return x, teacher_activation(cfg, clean).astype(np.float32), ref_bpm, beats
+
+
+def net_tasks(cfg: dict, rows: pd.DataFrame) -> list:
+    """Training rows, then noise_rows noise-only clips cycling over noise_kinds."""
+    tr = cfg["training"]["net"]
+    kinds = tr["noise_kinds"]
+    return _tasks(rows) + [("noise", kinds[k % len(kinds)], cfg["data"]["seed"] + k)
+                           for k in range(tr["noise_rows"])]
 
 
 def net_dataset(cfg: dict, rows: pd.DataFrame) -> dict:
-    """Zero-padded TCN inputs, reference HR, valid length and NaN-padded beat times per
-    training row."""
-    _, xs, refs, beats = zip(*data.map_records(cfg, _net_example, _tasks(rows), "TCN inputs"))
+    """Zero-padded TCN inputs and target activations, reference HR (NaN: noise only), valid
+    length and NaN-padded beat times per row."""
+    xs, targets, refs, beats = zip(*data.map_records(cfg, _net_example, net_tasks(cfg, rows),
+                                                     "TCN inputs"))
     lengths = np.array([x.shape[1] for x in xs])
     x_all = np.zeros((len(xs), xs[0].shape[0], lengths.max()), dtype=np.float32)
-    for j, x in enumerate(xs):
+    t_all = np.zeros((len(xs), lengths.max()), dtype=np.float32)
+    for j, (x, t) in enumerate(zip(xs, targets)):
         x_all[j, :, :x.shape[1]] = x
+        t_all[j, :t.size] = t
     beat_all = np.full((len(xs), max(len(b) for b in beats if b is not None)), np.nan)
     for j, b in enumerate(beats):
         if b is not None:
             beat_all[j, :len(b)] = b
-    return {"x": x_all, "ref": np.array(refs, dtype=np.float32), "lengths": lengths,
-            "beats": beat_all}
+    return {"x": x_all, "target": t_all, "ref": np.array(refs, dtype=np.float32),
+            "lengths": lengths, "beats": beat_all}
 
 
 def crop_targets(cfg: dict, dataset: dict, idx: np.ndarray, end_frames: np.ndarray,
@@ -117,14 +156,28 @@ class CausalTCN(nn.Module):
         return self.out(x).squeeze(1)
 
 
-def causal_normalise(x: torch.Tensor, alpha: float) -> torch.Tensor:
-    """Running-mean subtraction identical to net.normalise (mean starts at the first frame)."""
-    out = torch.empty_like(x)
-    mean = x[:, :, 0].clone()
+def causal_normalise(x: torch.Tensor, alpha: float, n_norm: int) -> torch.Tensor:
+    """Running-mean subtraction of the first n_norm inputs, identical to net.normalise (mean
+    starts at the first frame); the other inputs unchanged."""
+    out = x.clone()
+    mean = x[:, :n_norm, 0].clone()
     for t in range(x.shape[2]):
-        mean = mean + alpha * (x[:, :, t] - mean)
-        out[:, :, t] = x[:, :, t] - mean
+        mean = mean + alpha * (x[:, :n_norm, t] - mean)
+        out[:, :n_norm, t] = x[:, :n_norm, t] - mean
     return out
+
+
+def init_from(model: CausalTCN, weights: dict) -> None:
+    """Start the model from exported weights (export_net layout); first-layer inputs beyond
+    theirs start at zero."""
+    with torch.no_grad():
+        for i, conv in enumerate(model.convs):
+            w = torch.from_numpy(weights[f"conv{i}_w"])
+            conv.weight.zero_()
+            conv.weight[:, : w.shape[1]] = w
+            conv.bias.copy_(torch.from_numpy(weights[f"conv{i}_b"]))
+        model.out.weight.copy_(torch.from_numpy(weights["out_w"]).reshape(1, -1, 1))
+        model.out.bias.copy_(torch.from_numpy(np.atleast_1d(weights["out_b"])))
 
 
 def periodicity_logits(act: torch.Tensor, lags: torch.Tensor) -> torch.Tensor:
@@ -153,13 +206,18 @@ def periodicity_loss(logits: torch.Tensor, ref: torch.Tensor, grid: torch.Tensor
 
 
 def fit_net(cfg: dict, dataset: dict) -> nn.Module:
-    """Train on random crops with the periodicity loss; return the model."""
+    """Train on random crops with the periodicity loss and the target-activation loss (module
+    docstring), starting from the teacher; return the model."""
     nc, tr = cfg["net"], cfg["training"]["net"]
     torch.manual_seed(cfg["data"]["seed"])
+    torch.set_flush_denormal(True)   # outputs pushed to 0 on noise make denormal gradients slow
     rng = np.random.default_rng(cfg["data"]["seed"])
     rate = cfg["frontend"]["env_rate_hz"]
-    x = causal_normalise(torch.from_numpy(dataset["x"]), 1.0 / (nc["norm_tau_s"] * rate))
+    x = causal_normalise(torch.from_numpy(dataset["x"]), 1.0 / (nc["norm_tau_s"] * rate),
+                         cfg["frontend"]["heart_bands"])
+    target_all = torch.from_numpy(dataset["target"])
     model = CausalTCN(x.shape[1], nc["channels"], nc["kernel"], nc["dilations"])
+    init_from(model, net.load_weights(cfg["paths"]["models_dir"] / f"{tr['teacher']}_tcn.npz"))
     scale = torch.nn.Parameter(torch.tensor(10.0))
     opt = torch.optim.Adam([*model.parameters(), scale], lr=tr["lr"])
     crop = int(tr["crop_s"] * rate)
@@ -174,6 +232,7 @@ def fit_net(cfg: dict, dataset: dict) -> nn.Module:
             idx = perm[i:i + tr["batch"]]
             start = rng.integers(0, lengths[idx] - crop)
             xb = torch.stack([x[j, :, s:s + crop] for j, s in zip(idx, start)])
+            tb = torch.stack([target_all[j, s:s + crop] for j, s in zip(idx, start)])
             window = int(rng.integers(win_lo, win_hi + 1))
             act = torch.sigmoid(model(xb)[:, -window:])
             target = torch.from_numpy(crop_targets(cfg, dataset, idx, start + crop, window)
@@ -181,6 +240,7 @@ def fit_net(cfg: dict, dataset: dict) -> nn.Module:
             loss = periodicity_loss(periodicity_logits(act, lags), target, grid,
                                     (lags < window - 1)[None],
                                     cfg["training"]["scorer"]["positive_tol_rel"], scale)
+            loss = loss + tr["distill_weight"] * ((act - tb[:, -window:]) ** 2).mean()
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -201,8 +261,9 @@ def export_net(model: CausalTCN) -> dict:
 def torch_activation(model: CausalTCN, cfg: dict, x: np.ndarray) -> np.ndarray:
     """Whole-sequence activation from the torch model, to check the streaming numpy path."""
     alpha = 1.0 / (cfg["net"]["norm_tau_s"] * cfg["frontend"]["env_rate_hz"])
+    xn = causal_normalise(torch.from_numpy(x[None]), alpha, cfg["frontend"]["heart_bands"])
     with torch.no_grad():
-        return torch.sigmoid(model(causal_normalise(torch.from_numpy(x[None]), alpha)))[0].numpy()
+        return torch.sigmoid(model(xn))[0].numpy()
 
 
 # Scorer (block D)
@@ -329,11 +390,16 @@ def run(cfg: dict, out_name: str, scorer_only: bool = False) -> None:
     _calibration.npz."""
     models = cfg["paths"]["models_dir"]
     rows = training_rows(cfg)
-    inputs = {k: cfg[k] for k in ("augment", "data", "split", "stream", "frontend")}
+    inputs = {**{k: cfg[k] for k in ("augment", "data", "split", "stream", "frontend", "net")},
+              "rows": {k: cfg["training"]["net"][k]
+                       for k in ("teacher", "noise_rows", "noise_kinds")}}
+    teacher = models / f"{cfg['training']['net']['teacher']}_tcn.npz"
     if scorer_only:
         shutil.copyfile(net.weights_path(cfg), models / f"{out_name}_tcn.npz")
     else:
-        dataset = _cached(_cache_path(cfg, "tcn_inputs", inputs, [cfg["paths"]["labels"]]),
+        dataset = _cached(_cache_path(cfg, "tcn_inputs", inputs,
+                                      [cfg["paths"]["labels"], cfg["paths"]["negatives"],
+                                       teacher, Path(augment.__file__)]),
                           lambda: net_dataset(cfg, rows))
         model = fit_net(cfg, dataset)
         weights = export_net(model)
@@ -356,7 +422,8 @@ def scorer_inputs(cfg: dict, rows: pd.DataFrame) -> dict:
                 "frames": {k: cfg["training"]["scorer"][k]
                            for k in ("dense_until_s", "sparse_step_s")}}
     return _cached(_cache_path(cfg, "scorer_inputs", settings,
-                               [cfg["paths"]["labels"], net.weights_path(cfg)]),
+                               [cfg["paths"]["labels"], cfg["paths"]["negatives"],
+                                net.weights_path(cfg)]),
                    lambda: scorer_dataset(cfg, rows))
 
 

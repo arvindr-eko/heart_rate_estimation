@@ -46,10 +46,12 @@ def validate(cfg: dict) -> None:
         raise ValueError(f"env_rate_hz={rate} must divide fs_hz and the block size")
 
 
-def preflight(cfg: dict, need_splits: bool = True) -> None:
+def preflight(cfg: dict, need_splits: bool = True, need_negatives: bool = False) -> None:
     """Check inputs exist and outputs are writable; log one line per check, raise once."""
     checks = [("manifest", cfg["paths"]["manifest"].is_file()),
               ("wav_dir", cfg["paths"]["wav_dir"].is_dir())]
+    if need_negatives:
+        checks.append(("negatives", cfg["paths"]["negatives"].is_file()))
     if need_splits:
         checks += [("split_manifest", cfg["paths"]["split_manifest"].is_file()),
                    ("labels", cfg["paths"]["labels"].is_file()),

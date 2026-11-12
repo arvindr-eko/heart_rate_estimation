@@ -126,7 +126,8 @@ recording is used as recorded plus `copies` augmented copies, each drawn indepen
    first-order low-pass at `tilt_cutoff_hz`, which attenuates the high frequencies, imitating
    different chest pieces and contact.
 4. Noise (probability `p_noise`): one of `noise_types` (white, mains hum with harmonics, breath
-   bursts) at an SNR in `snr_db`. Friction noise is kept out of training for the stress test.
+   bursts, recorded non-heart sounds of the training part, §4.1) at an SNR in `snr_db`. Friction
+   noise is kept out of training for the stress test.
 
 The reference HR and the beat times of a copy follow the warp or the speed-up, so its targets
 stay exact.
@@ -152,21 +153,50 @@ stay exact.
 | p_jitter | 0.25 | share of warps with per-beat jitter |
 | jitter_cv | [0.03, 0.15] | per-beat interval variation (irregular rhythm) |
 | p_noise | 0.8 | share of copies with added noise |
-| noise_types | [white, hum, breath] | friction held out for the stress test |
+| noise_types | [white, hum, breath, "real:speech", "real:voice", "real:impact", "real:rub", "real:alarm", "real:music"] | friction held out for the stress test; real: recorded sounds of the negatives manifest |
+| eq_db | 6.0 | real sounds: random EQ ±dB at each channel point |
 | snr_db | [0, 25] | noise level, uniform |
 | gain_db | [-12, 12] | gain of every copy, uniform |
 | p_tilt | 0.5 | share of copies with spectral tilt |
 | tilt_alpha | [0.3, 1.0] | share of the original signal in the tilt mix |
 | tilt_cutoff_hz | 150 | first-order low-pass of the tilt |
+| channel_hz | [0, 50, 75, 100, 150, 200, 300, 400, 500, 700, 1000, 1500, 2000] | device channel: |
+| channel_db | [0, 0, -8, -11, -17, -20, -23, -25, -28, -31, -34, -36, -37] | synthetic noise as recorded; median background spectrum of 200 val recordings (30 % quietest 0.1 s), flat below 50 Hz |
 <!-- end:augmentation -->
+
+### 4.1 Recorded non-heart sounds
+Speech, voice, knocks and other sounds near the device, used as noise in training (network,
+presence gate) and, from a separate part, in `hr-estimation noise-eval`. Prepared by
+`hr-estimation prepare --negatives` (section `negatives` of `configs/training.yml`): resampled
+to 4000 Hz mono, 16-bit, peak 0.9, in `data/negatives/` (not in git), listed with kind, corpus,
+licence, group, split and attribution in `data/negatives/manifest.csv`. In use, each clip passes
+through the measured device channel (`augment.channel`) with a random equaliser of ±`eq_db`.
+
+| Corpus | Licence | Clips | Kinds |
+|---|---|---|---|
+| LibriSpeech `dev-clean` (Panayotov et al., ICASSP 2015; openslr.org/12) | CC BY 4.0 | 240 (40 speakers x `speech_per_speaker` 6) | speech |
+| FSD50K evaluation set (Fonseca et al., IEEE/ACM TASLP 2022; Zenodo 4060432) | CC0 1,780; CC BY 3.0/4.0 1,292 | 3,072 | impact, voice, rub, alarm, music |
+
+- Kinds from the FSD50K labels (`fsd50k_kinds`, first match wins): impact (knocks, taps, thuds,
+  doors, footsteps, typing, clock ticks, drums), voice (speech in rooms, conversation, singing,
+  laughter, cough, breathing), rub (scratching, crumpling, tearing, zippers, writing), alarm
+  (alarms, bells, phones, horns), music. Purr excluded (`fsd50k_exclude`): periodic like a heart.
+- Licences: only CC0 and CC BY (`licences`); the author of every CC BY clip is in the manifest's
+  `attribution` column. Clips are not redistributed.
+- Split: training and evaluation parts disjoint by speaker (LibriSpeech) and by Freesound
+  uploader (FSD50K), seeded hash, `eval_share` 0.3 to evaluation.
 
 ## 5. Training
 `hr-estimation train --out NAME` trains the three parts of a model and writes
 `models/NAME_tcn.npz`, `NAME_scorer.npz` and `NAME_calibration.npz` (released models are tracked
 in git, others ignored).
 - Network (block B): the autocorrelation of its output over a random 2-4 s window must peak at
-  the target period, the ECG HR over that window; no beat-by-beat labels are needed. Trained in
-  PyTorch, exported to numpy and checked against the streaming implementation.
+  the target period, the ECG HR over that window; no beat-by-beat labels are needed. Since
+  hr_v9 also: the output must match the `teacher` network (hr_v8) on the recording without
+  added noise (squared error x `distill_weight`), and stay at 0 on `noise_rows` clips of
+  non-heart sound only (`noise_kinds`, §4.1). Initialised from the teacher, zero weights for the
+  added inputs. Trained in PyTorch, exported to numpy and checked against the streaming
+  implementation.
 - Scorer (block D): inputs from streaming the training recordings and their copies through
   blocks A-C of the device code; target: the states within 3 % of the ECG HR over the frame's
   window. Frames every 0.25 s up to 5 s, then one per second.
@@ -182,8 +212,12 @@ in git, others ignored).
 | net.periodicity_window_s | [2.0, 4.0] | loss window drawn per batch |
 | net.crop_s | 4.0 | length of each training example |
 | net.batch | 32 | examples per batch |
-| net.epochs | 40 | passes over the training set |
+| net.epochs | 30 | passes over the training set |
 | net.lr | 0.003 | Adam learning rate |
+| net.teacher | hr_v8 | target activation: this model's TCN on the recording |
+| net.distill_weight | 100.0 | without added noise (MSE, x this weight), 0 on |
+| net.noise_rows | 1500 | noise-only rows (max_duration_s each, noise_kinds) |
+| net.noise_kinds | [taps, rhythmic_taps, handling, scratch, friction, speech, breath, white, hum, "real:speech", "real:voice", "real:impact", "real:rub", "real:alarm", "real:music"] | kinds of the noise-only rows (target 0) |
 | scorer.positive_tol_rel | 0.03 | target: states within 3 % of the target HR |
 | scorer.dense_until_s | 5.0 | training frames every 0.25 s up to here, |
 | scorer.sparse_step_s | 1.0 | then one per second |

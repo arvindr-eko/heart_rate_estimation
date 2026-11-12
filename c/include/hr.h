@@ -110,7 +110,7 @@ uint32_t hr_state_size(void);
 
 #ifdef HR_DEBUG
 /* Intermediate outputs of the latest block or frame, for comparison with the reference. */
-const float *hr_debug_band_energy(const hr_state_t *s);   /* [HR_N_BANDS][HR_ENV_PER_BLOCK] */
+const float *hr_debug_band_energy(const hr_state_t *s);   /* [HR_FE_OUT][HR_ENV_PER_BLOCK] */
 const float *hr_debug_activation(const hr_state_t *s);    /* [HR_ENV_PER_BLOCK] */
 const float *hr_debug_features(const hr_state_t *s);      /* [HR_N_STATES][HR_N_IN] */
 const float *hr_debug_log_emission(const hr_state_t *s);  /* [HR_N_STATES] */

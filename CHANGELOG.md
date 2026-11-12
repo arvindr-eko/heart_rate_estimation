@@ -22,6 +22,58 @@ key test results; the full documentation of a version is `docs/` at its tag.
 6. Commit, tag `vMAJOR.MINOR.PATCH`, push the branch and the tag
    (`git push origin main vMAJOR.MINOR.PATCH`).
 
+## 1.3.0rc1 (2026-11-11), model hr_v9c, beat detector trained against other sounds (release candidate, not released)
+No beat activation on speech, knocks and other sounds near the device, from the 1.2.0rc1 device
+test. C API unchanged.
+- Front end (block A, `frontend.py`, `frontend.c`): 8 network inputs instead of 4. Bands
+  400-800 and 800-1600 Hz added as ln(E band / E 25-400 Hz); voicing: highest NCCF peak over lags
+  2.5-12 ms of the 100-1600 Hz signal, per 10 ms within the current block (no added state);
+  impulsiveness: ln(peak 1 ms energy / mean energy). Running-mean removal on the 4 heart bands
+  only.
+- Network hr_v9c (block B, same layout): initialised from hr_v8; trained with the hr_v8 output on
+  the recording without added noise as target (squared error x 100, 30 epochs) and output 0 on
+  1,500 clips of non-heart sound: 9 synthetic kinds and recorded speech, voice, knocks, rubbing,
+  alarms and music (LibriSpeech, FSD50K CC0 and CC BY, `hr-estimation prepare --negatives`,
+  [docs/data.md](docs/data.md) §4.1). Scorer, calibration and presence gate retrained on it.
+- Readout: first reading at presence 0.6 (was 0.5) for 1.0 s (was 0.5 s).
+- `hr-estimation noise-eval`: recorded sounds of speakers and uploaders not used in training
+  (20 clips of 20 s per kind), lift-offs, swaps to another heart, heart plus sound. Global
+  `--set SECTION.KEY=VALUE` on every command.
+- No-heart clips, share with any reading, 1.2.0rc1 to 1.3.0rc1: recorded speech 0.40 to 0.10,
+  voice 0.10 to 0.05, knocks and impacts 0.20 to 0, rubbing 0.30 to 0.20, alarms 0.10 to 0.05,
+  music 0.30 to 0.05; synthetic taps 0.80 to 0.10, rhythmic taps 1.00 to 0.30, handling 0.85 to
+  0.45, speech 1.00 to 0, friction 0.10 to 0. Lift-off: measurement ended in 59 of 60 per kind,
+  median 3.0-3.5 s; error of the first reading after a return with rubbing, 90th percentile 34.5
+  to 2.1 BPM. Swap to another heart: adapted in 45 of 45, median 4.5 to 4.25 s (90th percentile
+  8.25 to 8.5 s).
+- Test split against 1.2.0rc1: regular median time to first reading 2.75 to 3.0 s (90th
+  percentile 4.0 to 4.25 s), first within ±3 BPM 0.888 to 0.893, accurate at 4 s 0.858 to 0.822,
+  MAE 1.27 to 1.36 BPM, irregular coverage 0.996 to 1.000, reading by 10 s 0.997 to 0.990.
+  Stress: median first reading 3.75 to 4.0 s (90th percentile 4.5 to 5.5 s), reading by 10 s
+  0.977 to 0.937, MAE 1.62 to 1.90 BPM.
+- C port: state 9,956 to 10,020 bytes (budget 10,240); stack of the deepest call path 672 bytes,
+  libm included (budget 1,024); code and constants 16,394 to 17,371 bytes; host time per
+  ordinary block 6.7 µs (1.1.0) to 12.0 µs, frame block unchanged (bundle self-test, same
+  computer). 825 test recordings: identical reading times; 1 of 11,336 readings differs by more
+  than 0.1 BPM (0.47 BPM, a tie in the estimate); recording tolerance 0.2 to 0.5 BPM.
+- Tests: corner-case first reading by 5 s (was 4 s; 55 BPM synthetic: 4.5 s); synthetic speech
+  gives no reading (was a known limitation).
+- Experiments (validation and held-out non-heart clips):
+  - distillation weight 10, 40 epochs (hr_v9b): activation on held-out speech, knocks and
+    rubbing 0.24-0.34 on average, readings on them as with 1.2.0rc1; weight 100, 30 epochs
+    (hr_v9c): 0.07-0.17, hearts 0.53; 16 channels instead of 8: no gain;
+  - presence threshold 0.5-0.7 and confirmation 0.5-1.0 s: 0.6 and 1.0 s chosen (speech 0.25
+    to 0.10, first within ±3 BPM 0.878 to 0.898, median first reading +0.5 s); 0.7 lowered
+    irregular coverage;
+  - no tracker update while no heartbeat is heard: validation MAE 1.78 to 1.82 BPM, not
+    adopted.
+- Not met: test MAE above 1.2.0rc1; fewer readings under stress; no-heart readings on rubbing,
+  handling and rhythmic taps; adaptation to a new rate unchanged. hr_v9c was trained by
+  `train.fit_net` from cached inputs with the settings now in `configs/training.yml`; retrain
+  with `hr-estimation train` before a release.
+- Device test (2026-11-11, firmware `h13` side by side with `h12` = 1.2.0rc1): no readings on
+  clicks or speech; first reading on the screen after 6-7 s (h12: 4-5 s). Not released; no tag.
+
 ## 1.2.0rc1 (2026-11-11), model hr_v8, presence gate (release candidate, not released)
 Readings only with a heart sound, and a fast stop after lift-off, from field reports of readings
 on finger taps, handling and the device on a table.

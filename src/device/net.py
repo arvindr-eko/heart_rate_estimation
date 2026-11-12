@@ -1,9 +1,10 @@
 """Block B, causal TCN: beat activation from band energies, one 10 ms frame at a time.
 
-Input per frame: the 4 log energies minus a causal running mean per band (time constant
-norm_tau_s, so recording gain drops out). Output per frame: activation in [0, 1], high at each
-heartbeat. 5 dilated causal convolutions (kernel 3, dilations 1-16, 8 channels, ReLU, residual
-from layer 1) and a sigmoid output; receptive field 63 frames = 0.63 s; 913 weights.
+Input per frame: the front end's values (frontend.process), the heart-band log energies minus a
+causal running mean per band (time constant norm_tau_s, so recording gain drops out), the other
+inputs (level-free) as they are. Output per frame: activation in [0, 1], high at each heartbeat,
+0 for other sounds. 5 dilated causal convolutions (kernel 3, dilations 1-16, 8 channels, ReLU,
+residual from layer 1) and a sigmoid output; receptive field 63 frames = 0.63 s.
 State: one delay line per layer holding dilation x (kernel - 1) past inputs, and the running
 mean. float32 throughout.
 """
@@ -21,6 +22,7 @@ class NetState:
     dilations: list
     kernel: int
     norm_alpha: float
+    n_norm: int                 # leading inputs with the running mean removed (heart bands)
     run_mean: np.ndarray | None
     buffers: list
 
@@ -45,15 +47,19 @@ def init(cfg: dict, weights: dict | None = None) -> NetState:
                for c, d in zip(inputs, dilations)]
     return NetState(weights=w, dilations=dilations, kernel=nc["kernel"],
                     norm_alpha=1.0 / (nc["norm_tau_s"] * cfg["frontend"]["env_rate_hz"]),
-                    run_mean=None, buffers=buffers)
+                    n_norm=cfg["frontend"]["heart_bands"], run_mean=None, buffers=buffers)
 
 
 def normalise(state: NetState, frame: np.ndarray) -> np.ndarray:
-    """Subtract the causal running mean of each band (mean starts at the first frame)."""
+    """Subtract the causal running mean of each heart band (mean starts at the first frame);
+    the other inputs pass unchanged."""
+    h = state.n_norm
     if state.run_mean is None:
-        state.run_mean = frame.astype(np.float32)
-    state.run_mean += np.float32(state.norm_alpha) * (frame - state.run_mean)
-    return frame - state.run_mean
+        state.run_mean = frame[:h].astype(np.float32)
+    state.run_mean += np.float32(state.norm_alpha) * (frame[:h] - state.run_mean)
+    out = frame.astype(np.float32).copy()
+    out[:h] = frame[:h] - state.run_mean
+    return out
 
 
 def step(state: NetState, x: np.ndarray) -> float:

@@ -25,19 +25,22 @@ void hr_net_init(hr_net_t *nn)
     nn->mean_set = 0;
 }
 
-/* Subtract the causal running mean of each band (started at the first frame). */
+/* Subtract the causal running mean of each heart band (started at the first frame); the other
+ * inputs pass unchanged. */
 void hr_net_normalise(hr_net_t *nn, const float in[HR_NET_IN], float out[HR_NET_IN])
 {
     /* the mean starts at the first frame */
     if (!nn->mean_set) {
-        for (int b = 0; b < HR_NET_IN; b++)
+        for (int b = 0; b < HR_HEART_BANDS; b++)
             nn->mean[b] = in[b];
         nn->mean_set = 1;
     }
-    for (int b = 0; b < HR_NET_IN; b++) {
+    for (int b = 0; b < HR_HEART_BANDS; b++) {
         nn->mean[b] += HR_NORM_ALPHA * (in[b] - nn->mean[b]);
         out[b] = in[b] - nn->mean[b];
     }
+    for (int b = HR_HEART_BANDS; b < HR_NET_IN; b++)
+        out[b] = in[b];
 }
 
 /* One frame through the dilated causal convolutions and the sigmoid output. */

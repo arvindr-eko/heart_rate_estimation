@@ -19,9 +19,10 @@ typedef struct {
     uint8_t started;                /* states set from the first sample */
 } hr_frontend_t;
 
-/* B causal TCN (net.py): running input mean and one ring delay line per layer. */
+/* B causal TCN (net.py): running mean of the heart-band inputs and one ring delay line per
+ * layer. */
 typedef struct {
-    float mean[HR_NET_IN];
+    float mean[HR_HEART_BANDS];
     float line[HR_NET_LINE_TOTAL];  /* layer i: [2 x dilation slots][input channels] */
     uint16_t oldest[HR_NET_LAYERS]; /* slot of the oldest input per layer */
     uint8_t mean_set;
@@ -95,7 +96,7 @@ typedef struct {
     uint8_t has_reading;
     hr_scratch_t scratch;
 #ifdef HR_DEBUG
-    float dbg_env[HR_N_BANDS][HR_ENV_PER_BLOCK];
+    float dbg_env[HR_FE_OUT][HR_ENV_PER_BLOCK];
     float dbg_act[HR_ENV_PER_BLOCK];
     float dbg_feats[HR_N_STATES][HR_N_IN];
     float dbg_log_emission[HR_N_STATES];
@@ -105,16 +106,17 @@ typedef struct {
 
 /* Q: per envelope sample; the high-band ratio per frame. */
 void hr_quality_init(hr_quality_t *q);
-void hr_quality_update(hr_quality_t *q, const float env[HR_N_BANDS]);
+void hr_quality_update(hr_quality_t *q, const float env[HR_FE_OUT]);
 float hr_quality_high_band(const hr_quality_t *q);
 
-/* A: filter one block of int16 samples (full scale 32768), log mean energy per band and
- * envelope interval. */
+/* A: filter one block of int16 samples (full scale 32768); the front-end values per envelope
+ * interval; work: HR_BLOCK_SAMPLES floats of scratch (the source signal). */
 void hr_frontend_init(hr_frontend_t *fe);
 void hr_frontend_process(hr_frontend_t *fe, const int16_t pcm[HR_BLOCK_SAMPLES],
-                         float env[HR_N_BANDS][HR_ENV_PER_BLOCK]);
+                         float work[HR_BLOCK_SAMPLES], float out[HR_FE_OUT][HR_ENV_PER_BLOCK]);
 
-/* B: subtract the running mean; one 10 ms frame through the TCN, activation in [0, 1]. */
+/* B: subtract the running mean of the heart bands; one 10 ms frame through the TCN,
+ * activation in [0, 1]. */
 void hr_net_init(hr_net_t *nn);
 void hr_net_normalise(hr_net_t *nn, const float in[HR_NET_IN], float out[HR_NET_IN]);
 float hr_net_step(hr_net_t *nn, const float x[HR_NET_IN]);

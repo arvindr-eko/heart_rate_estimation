@@ -1,7 +1,10 @@
 """Synthetic PCG, noise at a set SNR, and training-data augmentation (training split only).
 
 Synthetic PCG: S1 and S2 as windowed sinusoids at a known HR, for unit tests and stress cases.
-Noise: white, friction, hum, breath, taps, handling, scaled to an in-band SNR.
+Noise: synthetic kinds (white, friction, hum, breath, taps, handling, ...) and real recorded
+sounds ("real:<kind>": clips of the negatives manifest, data.prepare_negatives; training or
+evaluation split by speaker or uploader), scaled to an in-band SNR. Real sounds pass the device
+channel with a random EQ (augment.eq_db per channel point) so no single recording chain is learnt.
 Augmentation: beat-synchronous time warping, speed-up to very fast rates, rhythm jitter, gain,
 spectral tilt, noise. Time warping keeps each cycle's first keep_s after the R-peak (S1, systole,
 S2) and resamples only the diastole, as HR changes mostly shorten or lengthen diastole; rates
@@ -12,11 +15,17 @@ segment end samples, so joins are sample-continuous (no clicks at beat times).
 
 import numpy as np
 import pandas as pd
+import soundfile as sf
 from scipy import signal
 
 SNR_BAND_HZ = (25, 400)
 NO_HEART_PEAK = 0.3       # no-heart clips: noise peak (full scale 1.0)
 NO_HEART_FLOOR = 0.003    # and the SD of the room floor under it
+REAL = "real:"            # noise kinds from recorded sounds: REAL + manifest kind
+CLIP_LEVEL_DB = 6.0       # real sounds: each clip at a random level within ± this
+CLIP_GAP_S = 1.0          # and followed by a random pause up to this
+
+_NEGATIVES: dict = {}     # negatives manifest, loaded once per process
 
 
 def sound(fs: int, freq_hz: float, dur_s: float, rng: np.random.Generator) -> np.ndarray:
@@ -139,33 +148,80 @@ def noise(kind: str, n: int, fs: int, rng: np.random.Generator) -> np.ndarray:
     raise ValueError(f"unknown noise type {kind}")
 
 
-def channel(x: np.ndarray, fs: int, cfg: dict) -> np.ndarray:
-    """Synthetic sound as the device records it: linear-phase FIR with the measured channel
-    magnitude (augment.channel_hz / channel_db), group delay removed."""
+def negatives(cfg: dict) -> pd.DataFrame:
+    """Manifest of the real non-heart sounds (paths.negatives), loaded once per process."""
+    if "df" not in _NEGATIVES:
+        _NEGATIVES["df"] = pd.read_csv(cfg["paths"]["negatives"])
+    return _NEGATIVES["df"]
+
+
+def real_noise(cfg: dict, kind: str, n: int, rng: np.random.Generator,
+               split: str = "train") -> np.ndarray:
+    """n samples of recorded sound of one manifest kind and split: random clips (a random
+    excerpt of a longer one), each at unit SD within ±CLIP_LEVEL_DB, with random pauses up to
+    CLIP_GAP_S between them."""
+    fs = cfg["stream"]["fs_hz"]
+    m = negatives(cfg)
+    files = m.loc[(m["kind"] == kind) & (m["split"] == split), "file"].to_numpy()
+    if files.size == 0:
+        raise ValueError(f"no {split} clips of kind {kind} in the negatives manifest")
+    out, pos = np.zeros(n), int(rng.uniform(0, CLIP_GAP_S) * fs)
+    while pos < n:
+        clip, _ = sf.read(cfg["paths"]["negatives"].parent / files[rng.integers(files.size)],
+                          dtype="float32")
+        take = min(clip.size, n - pos)
+        start = int(rng.integers(0, clip.size - take + 1))
+        piece = clip[start:start + take]
+        out[pos:pos + take] += (piece / max(float(piece.std()), 1e-9)
+                                * 10 ** (rng.uniform(-CLIP_LEVEL_DB, CLIP_LEVEL_DB) / 20))
+        pos += take + int(rng.uniform(0, CLIP_GAP_S) * fs)
+    return out
+
+
+def channel(x: np.ndarray, fs: int, cfg: dict,
+            rng: np.random.Generator | None = None) -> np.ndarray:
+    """Sound as the device records it: linear-phase FIR with the measured channel magnitude
+    (augment.channel_hz / channel_db), group delay removed; with rng, a random EQ of
+    ±augment.eq_db at each channel point on top."""
     ag = cfg["augment"]
-    gain = 10 ** (np.asarray(ag["channel_db"], float) / 20)
-    taps = signal.firwin2(255, np.asarray(ag["channel_hz"], float), gain, fs=fs)
+    db = np.asarray(ag["channel_db"], float)
+    if rng is not None:
+        db = db + rng.uniform(-ag["eq_db"], ag["eq_db"], db.size)
+    taps = signal.firwin2(255, np.asarray(ag["channel_hz"], float), 10 ** (db / 20), fs=fs)
     return signal.fftconvolve(x, taps, mode="same")
 
 
-def no_heart_clip(cfg: dict, kind: str, n: int, rng: np.random.Generator) -> np.ndarray:
-    """No heart sound, as recorded: n samples of one noise kind (peak NO_HEART_PEAK) over a
-    faint room floor (NO_HEART_FLOOR), through the device channel."""
+def background(cfg: dict, kind: str, n: int, rng: np.random.Generator,
+               split: str = "train") -> np.ndarray:
+    """n samples of one noise kind as recorded: synthetic through the device channel, real
+    (REAL prefix) through the channel with a random EQ."""
     fs = cfg["stream"]["fs_hz"]
-    x = noise(kind, n, fs, rng)
+    if kind.startswith(REAL):
+        return channel(real_noise(cfg, kind[len(REAL):], n, rng, split), fs, cfg, rng)
+    return channel(noise(kind, n, fs, rng), fs, cfg)
+
+
+def no_heart_clip(cfg: dict, kind: str, n: int, rng: np.random.Generator,
+                  split: str = "train") -> np.ndarray:
+    """No heart sound, as recorded: n samples of one noise kind (peak NO_HEART_PEAK) over a
+    faint room floor (NO_HEART_FLOOR), through the device channel (real kinds: with a random
+    EQ)."""
+    fs = cfg["stream"]["fs_hz"]
+    real = kind.startswith(REAL)
+    x = real_noise(cfg, kind[len(REAL):], n, rng, split) if real else noise(kind, n, fs, rng)
     x = (x / max(np.abs(x).max(), 1e-9) * NO_HEART_PEAK
          + NO_HEART_FLOOR * band_noise(n, fs, (20, 1000), rng))
-    return channel(x, fs, cfg)
+    return channel(x, fs, cfg, rng if real else None)
 
 
 def lift_off(cfg: dict, audio: np.ndarray, at_s: float, off_s: float, kind: str, level: float,
-             rng: np.random.Generator) -> np.ndarray:
+             rng: np.random.Generator, split: str = "train") -> np.ndarray:
     """Recording with the stethoscope lifted at at_s for off_s: noise of one kind (silence:
-    zeros) at level x the SD of the recording before at_s, through the device channel; then the
-    rest of the recording."""
+    zeros; background) at level x the SD of the recording before at_s; then the rest of the
+    recording."""
     fs = cfg["stream"]["fs_hz"]
     i, n_off = int(at_s * fs), int(off_s * fs)
-    off = np.zeros(n_off) if kind == "silence" else channel(noise(kind, n_off, fs, rng), fs, cfg)
+    off = np.zeros(n_off) if kind == "silence" else background(cfg, kind, n_off, rng, split)
     off = off / max(off.std(), 1e-12) * audio[:i].std() * level
     return np.concatenate([audio[:i], off, audio[i:]]).astype(np.float32)
 
@@ -195,10 +251,13 @@ def band_power(x: np.ndarray, fs: int) -> float:
     return float(np.mean(signal.sosfilt(sos, x) ** 2))
 
 
-def add_noise(audio: np.ndarray, fs: int, kind: str, snr_db: float, seed: int) -> np.ndarray:
-    """Audio plus noise scaled to snr_db, both powers measured in SNR_BAND_HZ."""
+def add_noise(audio: np.ndarray, fs: int, kind: str, snr_db: float, seed: int,
+              cfg: dict | None = None, split: str = "train") -> np.ndarray:
+    """Audio plus noise scaled to snr_db, both powers measured in SNR_BAND_HZ; real kinds
+    (background, needs cfg) as recorded, synthetic kinds as generated."""
     rng = np.random.default_rng(seed)
-    nz = noise(kind, audio.size, fs, rng)
+    nz = (background(cfg, kind, audio.size, rng, split) if kind.startswith(REAL)
+          else noise(kind, audio.size, fs, rng))
     scale = np.sqrt(band_power(audio, fs) / max(band_power(nz, fs), 1e-20) / 10 ** (snr_db / 10))
     return (audio + scale * nz).astype(np.float32)
 
@@ -315,7 +374,7 @@ def apply(cfg: dict, audio: np.ndarray, beats_s: np.ndarray | None, ref_bpm: flo
     if spec["tilt_alpha"] is not None:
         audio = tilt(audio, fs, spec["tilt_alpha"], cfg["augment"]["tilt_cutoff_hz"])
     if spec["noise"] is not None:
-        audio = add_noise(audio, fs, spec["noise"], spec["snr_db"], spec["seed"])
+        audio = add_noise(audio, fs, spec["noise"], spec["snr_db"], spec["seed"], cfg)
     n = int(cfg["data"]["max_duration_s"] * fs)
     if beats_s is not None:
         beats_s = beats_s[beats_s < n / fs]

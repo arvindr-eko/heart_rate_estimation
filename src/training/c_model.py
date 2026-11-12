@@ -73,6 +73,10 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_FRAME_BLOCKS": st["frame_blocks"], "HR_DECIMATION": fe.decimation,
         "HR_ENV_PER_BLOCK": st["block_samples"] // fe.decimation, "HR_ENV_RATE_HZ": env_rate,
         "HR_N_BANDS": len(fe.sos), "HR_N_SECTIONS": fe.sos[0].shape[0],
+        "HR_HEART_BANDS": fe.heart_bands, "HR_FE_OUT": frontend.n_inputs(cfg),
+        "HR_SOURCE_FROM": fe.source_from, "HR_SOURCE_FEATURES": int(fe.impulse > 0),
+        "HR_VOICING_LAG_MIN": int(fe.lags[0]), "HR_VOICING_LAG_MAX": int(fe.lags[-1]),
+        "HR_IMPULSE_WINDOW": max(fe.impulse, 1),
         "HR_NET_LAYERS": len(dil), "HR_NET_IN": conv_in[0], "HR_NET_CH": w["conv0_w"].shape[0],
         "HR_NET_KERNEL": cfg["net"]["kernel"], "HR_NET_LINE_TOTAL": sum(lines),
         "HR_N_STATES": grid.size, "HR_WIN": n_win,
@@ -96,7 +100,9 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_PRESENCE_N": len(readout.PRESENCE_FEATURES),
         "HR_PRESENCE_HIDDEN": presence.w1.shape[1] if presence is not None else 0}
     floats = {
-        "HR_LOG_FLOOR": frontend.LOG_FLOOR, "HR_NORM_ALPHA": 1.0 / (cfg["net"]["norm_tau_s"]
+        "HR_LOG_FLOOR": frontend.LOG_FLOOR,
+        "HR_NCCF_FLOOR_SQ": float(np.float32(frontend.NCCF_FLOOR * frontend.NCCF_FLOOR)),
+        "HR_NORM_ALPHA": 1.0 / (cfg["net"]["norm_tau_s"]
                                                                    * env_rate),
         "HR_PEAK_OFFSET_MAX": features.PEAK_OFFSET_MAX, "HR_EPS": features.EPS,
         "HR_VAR_FLOOR": features.VAR_FLOOR, "HR_MIN_OVERLAP": min_overlap,
@@ -142,6 +148,9 @@ def model(cfg: dict) -> tuple[dict, dict]:
     if presence is not None:
         arrays |= {"hr_presence_w1": presence.w1, "hr_presence_b1": presence.b1,
                    "hr_presence_w2": presence.w2}
+    if ints["HR_FE_OUT"] != ints["HR_NET_IN"]:
+        raise ValueError(f"front end gives {ints['HR_FE_OUT']} inputs, the TCN takes "
+                         f"{ints['HR_NET_IN']}")
     ints["HR_NET_DILATIONS"] = "{" + ", ".join(map(str, dil)) + "}"
     ints["HR_NET_LINE_OFFSETS"] = "{" + ", ".join(map(str, np.cumsum([0] + lines[:-1]))) + "}"
     ints["HR_NET_IN_CH"] = "{" + ", ".join(map(str, conv_in)) + "}"

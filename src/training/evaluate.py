@@ -32,7 +32,7 @@ from matplotlib.figure import Figure
 
 from training import config
 from device import estimator, net, readout, scorer
-from training import augment, data, labels
+from training import augment, c_port, data, labels
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +41,8 @@ BUCKET_COLORS = {"regular_common": "#2a78d6", "slow": "#eb6834", "irregular": "#
                  "very_fast": "#eda100"}  # categorical slots 1-4
 INK, MUTED, GRID = "#1f1f1e", "#6b6a64", "#e4e3de"
 OTHER_KEYS = ("n", "coverage", "ttfr_median_s", "first_ec13")  # metrics without an ECG reference
-STRATA = ["hardware_type", "firmware_revision", "mains_filter", "rhythm", "hr_band_10"]
+STRATA = ["hardware_type", "firmware_revision", "mains_filter", "rhythm", "hr_band_10",
+          "efast_pcg_murmur_classification"]
 STRESS = {                                    # stress protocol (hr-estimation evaluate --stress)
     "seed": 7,
     "noise_records": 200,                     # random recordings x noise types x SNRs; every
@@ -302,13 +303,15 @@ def stress_table(cfg: dict, per_rec: pd.DataFrame, per_read: pd.DataFrame) -> pd
 
 def provenance(cfg: dict) -> dict:
     """Software version, checksum of requirements.txt, git commit (with an
-    uncommitted-changes flag) and checksums of the model files (network, scorer, calibration)."""
+    uncommitted-changes flag) and checksums of the model files (network, scorer, calibration,
+    presence gate when fitted)."""
     def git(*args: str) -> str:
         """Output of a git command in the project root ('' outside a repository)."""
         return subprocess.run(["git", *args], cwd=config.PROJECT_ROOT, capture_output=True,
                               text=True).stdout.strip()
 
-    files = (net.weights_path(cfg), scorer.weights_path(cfg), readout.calibration_path(cfg))
+    files = [p for p in (net.weights_path(cfg), scorer.weights_path(cfg),
+                         readout.calibration_path(cfg), readout.presence_path(cfg)) if p.is_file()]
     reqs = config.PROJECT_ROOT / "requirements.txt"
     return {"version": config.version(),
             "requirements_sha256": hashlib.sha256(reqs.read_bytes()).hexdigest()[:12],
@@ -318,15 +321,22 @@ def provenance(cfg: dict) -> dict:
                              for p in files}}
 
 
-def write_run(cfg: dict, rec: pd.DataFrame, per_rec: pd.DataFrame, summary: dict, checks: dict,
-              tag: str, split: str) -> Path:
-    """Write config, per-recording results, readings, summary, targets and run record under
-    runs_dir/<time>_<weights>_<split>[_<tag>]."""
+def new_run(cfg: dict, split: str, tag: str) -> Path:
+    """Run folder runs_dir/<time>_<weights>_<split>[_<tag>] with the config used."""
     run_id = f"{datetime.now():%Y%m%d_%H%M%S}_{cfg['weights']}_{split}{'_' + tag if tag else ''}"
     out = cfg["paths"]["runs_dir"] / run_id
     out.mkdir(parents=True)
     plain_cfg = {**cfg, "paths": {k: str(v) for k, v in cfg["paths"].items()}}
     (out / "config.yml").write_text(yaml.safe_dump(plain_cfg, sort_keys=False))
+    return out
+
+
+def write_run(cfg: dict, rec: pd.DataFrame, per_rec: pd.DataFrame, summary: dict, checks: dict,
+              tag: str, split: str) -> Path:
+    """Write config, per-recording results, readings, summary, targets and run record under
+    runs_dir/<time>_<weights>_<split>[_<tag>]."""
+    out = new_run(cfg, split, tag)
+    run_id = out.name
     per_rec.to_csv(out / "per_record.csv", index=False)
     rec[["output_filename", "case", "readings"]].to_json(out / "readings.json", orient="records",
                                                          double_precision=15)
@@ -446,3 +456,155 @@ def run(cfg: dict, split: str, stress: bool = False, tag: str = "",
         figures(cfg, per_rec, per_read, out)
         strata(cfg, per_rec, meta).to_csv(out / "strata.csv", index=False)
     return out, summary, checks
+
+
+# No-heart evaluation (hr-estimation noise-eval): evaluation negatives only
+
+def _noise_one(cfg: dict, task: tuple) -> dict:
+    """Readings and restart times of one case: ("clip", kind, seed) a no-heart clip; ("lift",
+    file, kind, seed) a lift-off spliced into a recording; ("swap", file, file) the first
+    recording to swap_at_s, then the second (another heart rate); ("overlap", file, kind,
+    snr_db, seed) a recording with the sound added throughout."""
+    ne, fs = cfg["noise_eval"], cfg["stream"]["fs_hz"]
+    if task[0] == "clip":
+        audio = augment.no_heart_clip(cfg, task[1], int(ne["clip_s"] * fs),
+                                      np.random.default_rng(task[2]), split="eval")
+    elif task[0] == "lift":
+        _, name, kind, seed = task
+        audio = augment.lift_off(cfg, data.load_wav(cfg, name), ne["lift_at_s"], ne["off_s"],
+                                 kind, ne["lift_kinds"][kind], np.random.default_rng(seed),
+                                 split="eval")
+    elif task[0] == "swap":
+        first, second = (data.load_wav(cfg, name) for name in task[1:3])
+        audio = np.concatenate([first[: int(ne["swap_at_s"] * fs)], second])
+    else:
+        _, name, kind, snr_db, seed = task
+        audio = augment.add_noise(data.load_wav(cfg, name), fs, kind, snr_db, seed, cfg,
+                                  split="eval")
+    readings, trace = estimator.run(cfg, audio, keep_trace=True)
+    return {"readings": readings, "restarts": c_port.restart_times(cfg, trace)}
+
+
+def _lift_case(cfg: dict, res: dict, beats: np.ndarray) -> dict:
+    """One lift-off: time from the lift-off to the end of the measurement (NaN: not within the
+    gap), largest change of a reading before that end from the last reading before the
+    lift-off, readings in the gap after it, time and error of the first reading after the
+    return (ECG over the same seconds of the original recording)."""
+    ne, lc = cfg["noise_eval"], cfg["labels"]
+    at, back = ne["lift_at_s"], ne["lift_at_s"] + ne["off_s"]
+    t = np.array([r[0] for r in res["readings"]]).reshape(-1)
+    bpm = np.array([r[1] for r in res["readings"]]).reshape(-1)
+    ends = [s for s in res["restarts"] if at < s <= back]
+    clear = ends[0] if ends else np.nan
+    before = bpm[t <= at]
+    during = bpm[(t > at) & (t < (clear if ends else back))]
+    after = np.flatnonzero(t > back)
+    err = np.nan
+    if after.size:
+        ref = labels.window_hr(beats, t[after[0]] - ne["off_s"], lc["window_s"],
+                               lc["min_intervals"])
+        err = abs(bpm[after[0]] - ref)
+    return {"clear_s": clear - at, "drift_bpm": (float(np.abs(during - before[-1]).max())
+                                                 if before.size and during.size else 0.0),
+            "ghost": int(((t >= clear) & (t < back)).sum()) if ends else 0,
+            "back_s": t[after[0]] - back if after.size else np.nan, "back_err_bpm": err}
+
+
+def _swap_case(cfg: dict, res: dict, beats_a: np.ndarray, beats_b: np.ndarray) -> dict:
+    """One swap to another heart: time from the swap to the first reading within rough_bpm of
+    the second heart's ECG (NaN: none), and readings after the swap off by more than rough_bpm
+    from both hearts (neither the old value held nor the new one)."""
+    ne, lc, ev = cfg["noise_eval"], cfg["labels"], cfg["eval"]
+    at = ne["swap_at_s"]
+    ref_a = labels.window_hr(beats_a, at, lc["window_s"], lc["min_intervals"])
+    adapt, wrong = np.nan, 0
+    for t, bpm, _ in res["readings"]:
+        if t <= at:
+            continue
+        ref_b = labels.window_hr(beats_b, t - at, lc["window_s"], lc["min_intervals"])
+        if abs(bpm - ref_b) <= ev["rough_bpm"]:
+            adapt = t - at if np.isnan(adapt) else adapt
+        elif abs(bpm - ref_a) > ev["rough_bpm"]:
+            wrong += 1
+    return {"adapt_s": adapt, "wrong": wrong}
+
+
+def _overlap_case(cfg: dict, res: dict, beats: np.ndarray, duration_s: float) -> dict:
+    """One recording with a sound added: readings per minute and readings off by more than
+    rough_bpm from the ECG over the same seconds."""
+    lc = cfg["labels"]
+    errs = [abs(bpm - labels.window_hr(beats, t, lc["window_s"], lc["min_intervals"]))
+            for t, bpm, _ in res["readings"]]
+    return {"per_min": len(errs) / duration_s * 60,
+            "off": int(sum(e > cfg["eval"]["rough_bpm"] for e in errs if np.isfinite(e)))}
+
+
+def _q(values: list, q: float) -> float:
+    """Quantile of the finite values (NaN without any)."""
+    v = np.asarray(values, float)
+    v = v[np.isfinite(v)]
+    return float(np.quantile(v, q)) if v.size else np.nan
+
+
+def noise_run(cfg: dict, tag: str = "") -> tuple[Path, dict]:
+    """No-heart clips per kind, lift-offs, swaps to another heart and overlaps on validation
+    recordings (trusted ECG, beats heard), all with evaluation negatives; write summary.json and
+    run_info.json to a run folder; return it and the summary."""
+    ne = cfg["noise_eval"]
+    df = data.load_split(cfg, "val")
+    df = df[df["ecg_trusted"] & ~df["unheard"]]
+    df = df.sample(n=min(ne["records"], len(df)), random_state=ne["seed"])
+    beats = labels.build_beats(cfg, df)
+    names = list(df["output_filename"])
+    seed = ne["seed"] * 1000
+    tasks = [("clip", k, seed + j) for k in ne["kinds"] for j in range(ne["clips"])]
+    tasks += [("lift", f, k, seed + j) for k in ne["lift_kinds"] for j, f in enumerate(names)]
+    hr = dict(zip(df["output_filename"], df["reference_bpm"]))
+    tasks += [("swap", a, b) for a, b in zip(names, names[1:] + names[:1])
+              if abs(hr[a] - hr[b]) >= ne["swap_min_delta_bpm"]]
+    tasks += [("overlap", f, k, snr, seed + j) for k in ne["overlap_kinds"]
+              for snr in ne["overlap_snr_db"] for j, f in enumerate(names)]
+    results = data.map_records(cfg, _noise_one, tasks, "noise-eval")
+    summary: dict = {"clips": {}, "lift": {}, "swap": [], "overlap": {}}
+    for task, res in zip(tasks, results):
+        if task[0] == "clip":
+            c = summary["clips"].setdefault(task[1], {"n": 0, "with_reading": 0, "readings": 0})
+            c["n"] += 1
+            c["with_reading"] += bool(res["readings"])
+            c["readings"] += len(res["readings"])
+        elif task[0] == "lift":
+            summary["lift"].setdefault(task[2], []).append(
+                _lift_case(cfg, res, beats[task[1]]["beats"]))
+        elif task[0] == "swap":
+            summary["swap"].append(_swap_case(cfg, res, beats[task[1]]["beats"],
+                                              beats[task[2]]["beats"]))
+        else:
+            dur = len(data.load_wav(cfg, task[1])) / cfg["stream"]["fs_hz"]
+            summary["overlap"].setdefault(f"{task[2]}@{task[3]:g}dB", []).append(
+                _overlap_case(cfg, res, beats[task[1]]["beats"], dur))
+    for c in summary["clips"].values():
+        c["share_with_reading"] = c["with_reading"] / c["n"]
+        c["per_min"] = c["readings"] / (c["n"] * ne["clip_s"] / 60)
+    summary["lift"] = {k: {"n": len(v),
+                           "cleared": int(np.isfinite([c["clear_s"] for c in v]).sum()),
+                           "clear_median_s": _q([c["clear_s"] for c in v], 0.5),
+                           "drift_p90_bpm": _q([c["drift_bpm"] for c in v], 0.9),
+                           "ghost_cases": sum(c["ghost"] > 0 for c in v),
+                           "back_median_s": _q([c["back_s"] for c in v], 0.5),
+                           "back_err_p90_bpm": _q([c["back_err_bpm"] for c in v], 0.9)}
+                       for k, v in summary["lift"].items()}
+    sw = summary["swap"]
+    summary["swap"] = {"n": len(sw), "adapted": int(np.isfinite([c["adapt_s"] for c in sw]).sum()),
+                       "adapt_median_s": _q([c["adapt_s"] for c in sw], 0.5),
+                       "adapt_p90_s": _q([c["adapt_s"] for c in sw], 0.9),
+                       "wrong_readings": sum(c["wrong"] for c in sw)}
+    summary["overlap"] = {k: {"n": len(v), "per_min": float(np.mean([c["per_min"] for c in v])),
+                              "off_readings": sum(c["off"] for c in v),
+                              "recordings_with_off": sum(c["off"] > 0 for c in v)}
+                          for k, v in summary["overlap"].items()}
+    out = new_run(cfg, "noise", tag)
+    (out / "summary.json").write_text(json.dumps(summary, indent=1, default=float))
+    info = {"run_id": out.name, "weights": cfg["weights"], "tag": tag, "n_cases": len(tasks),
+            "negatives": str(cfg["paths"]["negatives"]), **provenance(cfg)}
+    (out / "run_info.json").write_text(json.dumps(info, indent=1, default=float))
+    return out, summary

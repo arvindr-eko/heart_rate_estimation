@@ -16,7 +16,7 @@ readout:                       # when the first reading appears; changing these 
 
 # ── 2. ALGORITHM (fixed by the trained model) ────────────────────────────────────────────────────
 
-weights: hr_v8                             # models/hr_v8_*.npz: TCN, scorer, calibration
+weights: hr_v9c                            # models/hr_v9c_*.npz: TCN, scorer, calibration
 
 stream:
   fs_hz: 4000                              # PCG sample rate
@@ -25,9 +25,15 @@ stream:
   output_period_s: 1.0                     # one reading per second after the first
 
 frontend:                                  # block A
-  bands_hz: [[25, 50], [50, 100], [100, 200], [200, 400]]  # band-pass edges
+  bands_hz: [[25, 50], [50, 100], [100, 200], [200, 400], [400, 800], [800, 1600]]  # band-passes
+  heart_bands: 4                           # first bands (25-400 Hz): log energy, running mean
+                                           # removed; bands above: ln(E band / E heart bands)
   filter_order: 2                          # Butterworth order per band edge
-  env_rate_hz: 100                         # log energy every 10 ms
+  env_rate_hz: 100                         # one value per input every 10 ms
+  source_features: true                    # voicing and impulsiveness as TCN inputs
+  voicing_from_hz: 100                     # source signal: sum of the bands from here up
+  voicing_lag_ms: [2.5, 12.0]              # voicing: highest NCCF over these lags (83-400 Hz pitch)
+  impulse_window_ms: 1.0                   # impulsiveness: ln(peak energy over this / mean), 10 ms
 
 net:                                       # block B, causal TCN
   norm_tau_s: 1.0                          # running-mean time constant of the input
@@ -90,7 +96,7 @@ decision:                                  # block F, internal (re-validate when
   recent_tol_rel: 0.15                     # best lag within ±15 % of the estimate's period
   recent_min: 0.0                          # heart present (first reading, updates) at or above
   recent_lost: 0.2                         # after the first reading: below this, no heartbeat
-  confirm_s: 0.5                           # first reading only after this long of heart present
-  presence_min: 0.5                        # learned heart-present gate (readout.presence,
+  confirm_s: 1.0                           # first reading only after this long of heart present
+  presence_min: 0.6                        # learned heart-present gate (readout.presence,
                                            # <weights>_presence.npz): present at or above this
   presence_lost: 0.3                       # after the first reading: below this, no heartbeat
