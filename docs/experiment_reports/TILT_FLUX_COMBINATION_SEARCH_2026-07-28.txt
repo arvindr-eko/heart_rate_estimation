@@ -1,0 +1,34 @@
+TILT+FLUX COMBINATION STRATEGY SEARCH -- 2026-07-28
+Patient-level train/dev split (70/30 by file, seed=20260728): train=219 files, dev=95 files. 2500 random-search trials per strategy on TRAIN, best evaluated on held-out DEV.
+
+tilt_only: best params (train) = {'tol': 17.13799079647467, 'bonus': 4.233916359947758}
+  train:            n= 17815 correct=11917 ( 66.9%)  half= 243 ( 1.4%)  double=   9 ( 0.1%)  no_display= 4116 (23.1%)  badness=-11413
+  dev (held-out):            n=  8268 correct= 5578 ( 67.5%)  half=  74 ( 0.9%)  double=  11 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5408
+
+flux_only: best params (train) = {'tol': 3.2516432416682806, 'bonus': 2.9856526466018183}
+  train:            n= 17815 correct=11904 ( 66.8%)  half= 241 ( 1.4%)  double=  12 ( 0.1%)  no_display= 4116 (23.1%)  badness=-11398
+  dev (held-out):            n=  8268 correct= 5636 ( 68.2%)  half=  71 ( 0.9%)  double=   1 ( 0.0%)  no_display= 1796 (21.7%)  badness=-5492
+
+or_either: best params (train) = {'tol': 14.414272775080082, 'bonus': 4.852899735418456}
+  train:            n= 17815 correct=11904 ( 66.8%)  half= 244 ( 1.4%)  double=  11 ( 0.1%)  no_display= 4116 (23.1%)  badness=-11394
+  dev (held-out):            n=  8268 correct= 5579 ( 67.5%)  half=  74 ( 0.9%)  double=   9 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5413
+
+and_both: best params (train) = {'tol': 16.074168397645714, 'both_bonus': 9.768463479481516}
+  train:            n= 17815 correct=11906 ( 66.8%)  half= 231 ( 1.3%)  double=   9 ( 0.1%)  no_display= 4116 (23.1%)  badness=-11426
+  dev (held-out):            n=  8268 correct= 5578 ( 67.5%)  half=  72 ( 0.9%)  double=  11 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5412
+
+tiered: best params (train) = {'tol': 17.26886150965347, 'both_bonus': 9.215042593215133, 'either_bonus': 1.2077241855898093}
+  train:            n= 17815 correct=11905 ( 66.8%)  half= 230 ( 1.3%)  double=   9 ( 0.1%)  no_display= 4116 (23.1%)  badness=-11427
+  dev (held-out):            n=  8268 correct= 5575 ( 67.4%)  half=  77 ( 0.9%)  double=  10 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5401
+
+weighted_blend: best params (train) = {'tol': 14.455568236198477, 'w_tilt': 0.8537365579870664, 'bonus_scale': 5.933807666380482}
+  train:            n= 17815 correct=11921 ( 66.9%)  half= 251 ( 1.4%)  double=   9 ( 0.1%)  no_display= 4116 (23.1%)  badness=-11401
+  dev (held-out):            n=  8268 correct= 5571 ( 67.4%)  half=  80 ( 1.0%)  double=  11 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5389
+
+=== SUMMARY: dev-set badness, best to worst ===
+  flux_only        badness=-5492             n=  8268 correct= 5636 ( 68.2%)  half=  71 ( 0.9%)  double=   1 ( 0.0%)  no_display= 1796 (21.7%)  badness=-5492
+  or_either        badness=-5413             n=  8268 correct= 5579 ( 67.5%)  half=  74 ( 0.9%)  double=   9 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5413
+  and_both         badness=-5412             n=  8268 correct= 5578 ( 67.5%)  half=  72 ( 0.9%)  double=  11 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5412
+  tilt_only        badness=-5408             n=  8268 correct= 5578 ( 67.5%)  half=  74 ( 0.9%)  double=  11 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5408
+  tiered           badness=-5401             n=  8268 correct= 5575 ( 67.4%)  half=  77 ( 0.9%)  double=  10 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5401
+  weighted_blend   badness=-5389             n=  8268 correct= 5571 ( 67.4%)  half=  80 ( 1.0%)  double=  11 ( 0.1%)  no_display= 1796 (21.7%)  badness=-5389

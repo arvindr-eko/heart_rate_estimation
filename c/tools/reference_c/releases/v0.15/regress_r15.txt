@@ -1,0 +1,21 @@
+
+=== FULL CORPUS TALLY (314 files, DISPLAYED-bpm classification) -- r15 ===
+v0.14 baseline:  {'no_display': 4830, 'correct': 7816, 'half': 8, 'other': 407}
+r15:         {'no_display': 4821, 'correct': 7792, 'half': 8, 'other': 440}
+
+delta (candidate - baseline):
+       correct: -24
+          half: +0
+    no_display: -9
+         other: +33
+
+correct rate: baseline=59.84%  r15=59.66%  (n=13061 ticks)
+
+3/314 files had at least one tick's classification change:
+  unfiltered_iOS-v5_3_1__20230929-163144_z6xVb607 (gt=68.18181818181819, regular): baseline={'no_display': 12, 'correct': 22} -> r15={'no_display': 16, 'correct': 18}
+  pcg_impulse_test_2026-07-24T23-51-09_pox57bpm (gt=57.0, selfrecorded): baseline={'no_display': 50, 'other': 10, 'correct': 31} -> r15={'no_display': 50, 'other': 24, 'correct': 17}
+  pcg_impulse_test_2026-07-24T23-50-16_pox58bpm (gt=58.0, selfrecorded): baseline={'no_display': 55, 'correct': 22, 'other': 14} -> r15={'no_display': 42, 'other': 33, 'correct': 16}
+
+=== REAL RECORDINGS SANITY CHECK ===
+daniel_recovery_test.f32: baseline tail=54.8 (52 ticks)  r15 tail=54.8 (52 ticks)
+daniel_offchest_test.f32: baseline tail=53.3 (54 ticks)  r15 tail=53.3 (54 ticks)

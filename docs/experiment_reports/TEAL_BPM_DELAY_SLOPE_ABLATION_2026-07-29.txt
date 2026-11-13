@@ -1,0 +1,38 @@
+TEAL_BPM_DELAY_SLOPE ABLATION -- 2026-07-29
+Motivating file: unfiltered_iOS-v5_6_1__20240306-142405_OXte9VyY_2spedup (gt=162.16bpm, shipped slope=0.0538 shows ~80bpm)
+BASE_COMBINE = SHIPPED_COMBINE with flux agreement_bpm_tol=3.2516/agree_bonus=2.9857
+314 files -> train=219, dev=95
+
+slope=0.0: train=train: n=18379  correct=12471 (67.9%)  half=161 double=21 third=30 triple=194 other=1739  no_display=3685 (20.1%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-12107.0, 3685)
+           dev=dev: n=7704  correct=5473 (71.0%)  half=138 double=4 third=4 triple=25 other=532  no_display=1528 (19.8%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-5189.0, 1528)
+           target_file_mean=107.52679875184413
+
+slope=0.01: train=train: n=18379  correct=12324 (67.1%)  half=155 double=38 third=32 triple=193 other=1669  no_display=3882 (21.1%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-11938.0, 3882)
+           dev=dev: n=7704  correct=5396 (70.0%)  half=141 double=4 third=4 triple=25 other=508  no_display=1622 (21.1%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-5106.0, 1622)
+           target_file_mean=89.0305368188391
+
+slope=0.02: train=train: n=18379  correct=12301 (66.9%)  half=155 double=44 third=32 triple=189 other=1634  no_display=3934 (21.4%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-11903.0, 3934)
+           dev=dev: n=7704  correct=5391 (70.0%)  half=141 double=4 third=4 triple=21 other=494  no_display=1645 (21.4%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-5101.0, 1645)
+           target_file_mean=89.0305368188391
+
+slope=0.0538: train=train: n=18379  correct=12122 (66.0%)  half=169 double=12 third=67 triple=146 other=1615  no_display=4170 (22.7%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-11760.0, 4170)
+           dev=dev: n=7704  correct=5418 (70.3%)  half=143 double=1 third=12 triple=0 other=384  no_display=1742 (22.6%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-5130.0, 1742)
+           target_file_mean=79.5482069308297
+
+slope=0.08: train=train: n=18379  correct=11942 (65.0%)  half=168 double=7 third=110 triple=130 other=1595  no_display=4344 (23.6%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-11592.0, 4344)
+           dev=dev: n=7704  correct=5389 (70.0%)  half=140 double=0 third=16 triple=0 other=314  no_display=1841 (23.9%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-5109.0, 1841)
+           target_file_mean=77.55351681957187
+
+slope=0.12: train=train: n=18379  correct=11716 (63.7%)  half=180 double=3 third=128 triple=109 other=1557  no_display=4597 (25.0%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-11350.0, 4597)
+           dev=dev: n=7704  correct=5299 (68.8%)  half=161 double=0 third=31 triple=0 other=255  no_display=1954 (25.4%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-4977.0, 1954)
+           target_file_mean=77.06422018348624
+
+slope=0.18: train=train: n=18379  correct=11379 (61.9%)  half=187 double=3 third=143 triple=74 other=1494  no_display=5006 (27.2%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-10999.0, 5006)
+           dev=dev: n=7704  correct=5137 (66.7%)  half=151 double=0 third=39 triple=0 other=215  no_display=2158 (28.0%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-4835.0, 2158)
+           target_file_mean=76.57492354740062
+
+slope=0.25: train=train: n=18379  correct=11128 (60.5%)  half=187 double=33 third=196 triple=17 other=1287  no_display=5433 (29.6%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-10688.0, 5433)
+           dev=dev: n=7704  correct=4940 (64.1%)  half=171 double=0 third=51 triple=0 other=195  no_display=2343 (30.4%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-4598.0, 2343)
+           target_file_mean=76.08562691131499
+
+BEST by dev badness: slope=0.0

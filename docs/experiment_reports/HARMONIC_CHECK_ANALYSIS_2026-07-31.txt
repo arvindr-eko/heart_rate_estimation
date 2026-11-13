@@ -1,0 +1,22 @@
+HARMONIC-CHECK ANALYSIS -- 2026-07-31
+BASE_DSP=SHIPPED_DSP+artifact_baseline_pctl=0.35, agreement_signal=tilt, 314-file real+selfrecorded corpus (no synthetic), 20505 ticks with a candidate
+
+harmonic_confirmed=True: n=18519
+    correct       17149  ( 92.6%)
+    half            259  (  1.4%)
+    double           14  (  0.1%)
+    third            42  (  0.2%)
+    triple           53  (  0.3%)
+    two-thirds       32  (  0.2%)
+    other           970  (  5.2%)
+    half+double     273  (  1.5%)
+
+harmonic_confirmed=False: n=1986
+    correct         518  ( 26.1%)
+    half             14  (  0.7%)
+    double           43  (  2.2%)
+    third             5  (  0.3%)
+    triple          189  (  9.5%)
+    two-thirds       43  (  2.2%)
+    other          1174  ( 59.1%)
+    half+double      57  (  2.9%)

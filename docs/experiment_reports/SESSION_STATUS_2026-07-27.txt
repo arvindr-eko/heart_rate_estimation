@@ -1,0 +1,215 @@
+SESSION STATUS SNAPSHOT -- 2026-07-27 (PCG heart-rate DSP+combine sweep + scatter-plot diagnostics)
+Written as a durable checkpoint of everything in progress/completed this session, so it can be picked
+up cold later without re-deriving context.
+
+============================================================
+1. MAIN SWEEP (full_expanded_sweep.py 256 2000) -- FULLY COMPLETE
+============================================================
+Process: PID 25616, `python full_expanded_sweep.py 256 2000`, launched from pcg_abab/, ran from
+2026-07-25 11:37:23 AM to completion later on 2026-07-27 (suspended/resumed many times in between,
+process has since exited cleanly).
+Log: full_expanded_sweep.log
+
+STATUS: Phase 1 COMPLETE (256/256), Phase 1.5 COMPLETE (all 8 finalists), Phase 2 COMPLETE (all 8
+finalists x 2000 combine draws). Process exited normally.
+
+Top-8 Phase-1 finalists (by badness, accuracy-first w/ 3x half/double penalty), confirmed identical
+between the real sweep run and an early precompute cross-check: combo 80, 0, 255, 19, 220, 165, 178, 138.
+
+DETERMINISM CROSS-CHECK CONFIRMED: the real script's own final "BEST OVERALL"/"BEST WITH TENT HELD AT
+SHIPPED" output is BIT-FOR-BIT IDENTICAL to the precompute's WINNING_COMBO result (section 2) -- same
+71.3% correct, same badness=(-17626.0,4814), same DSP dict, same combine dict, down to the last digit.
+The precompute-while-waiting approach is now fully validated, not just a shortcut.
+
+Resume-safety: full_expanded_sweep.py was patched (2026-07-25) with real checkpoint/resume support
+(full_expanded_sweep_phase1_progress.pkl, backfilled from the log whenever needed) -- if this process
+ever dies unexpectedly, rerunning `python full_expanded_sweep.py 256 2000` will skip all 256 completed
+Phase-1 combos rather than restarting from scratch. Phase 2 itself has NO such resume mechanism (not
+needed at this stage -- if it dies, the top-8 finalists' raw logs are still cached in the real script's
+own RAW_LOGS_CACHE pickle once Phase 1.5 finishes, which it already has).
+
+============================================================
+2. WINNING COMBO (Phase 2 precompute result) -- DONE, SAVED
+============================================================
+File: WINNING_COMBO_2026-07-26.txt (durable record, full DSP+combine param dicts, band breakdown)
+Result: combo 255's DSP params + a tuned combine recipe = 71.3% correct, badness=(-17626,4814),
+beating both combo 0/SHIPPED (66.9%) and combo 80 alone (69.4%). "Best overall" and "best constrained"
+landed on the IDENTICAL result (no overfit-risk tradeoff needed).
+STATUS: Already applied to pcg_visualizer/index.html once (2026-07-26), since superseded by later
+combo loads (179, then 11 -- see section 5). Not currently the live visualizer state.
+
+============================================================
+3. ALL-256 COMBO SCATTER DATA -- DONE
+============================================================
+Script: generate_all256_json.py (resume-safe, same pattern as the main sweep)
+Output: all256_chart_data.json (all 256 combos, SHIPPED_COMBINE, 314-file corpus -- matches Phase 1's
+own scoring methodology exactly)
+Ran in 32,996s (~9.2 hours) total wall-clock, 59,289 points across 256 combos.
+(all256_partial_chart_data.json is a stale intermediate snapshot from mid-run -- superseded, safe to
+ignore/delete.)
+
+============================================================
+4. LEGACY ALGORITHM (Hilbert-envelope autocorr, 2nd-harmonic-gated) -- DONE
+============================================================
+Ported from pcg_visualizer/index.html's own JS port (legacyComputeHr, added 2026-07-21) of the original
+C:\Users\daniel\Downloads\pcg_heart_rate.py's compute_pcg_hr -- an older, independent method: full
+non-circular autocorrelation of the Hilbert envelope, boxcar smoothing, min-distance peak detection, an
+ad hoc S1-S2 "suspiciously fast" correction, and a HARD requirement that a 2nd harmonic exist near 2x
+the candidate lag (reject entirely -> -1 if absent).
+Files: legacy_algorithm.py (the port + validate_fast_autocorr() self-test), legacy_algorithm_corpus_run.py
+(batch runner), legacy_algorithm_chart_data.json (output).
+Fixed params used (deliberately NOT tied to whatever combo is live in the visualizer, since this is a
+stable independent reference): WIN=8.0s, TRANSIENT_LIMIT_MULT=4.29 (SHIPPED_DSP's value), TICK_S=0.25s.
+Validated the FFT-based fast autocorrelation (needed for speed -- naive O(L^2) would be far too slow
+across the whole corpus) against the naive version: ~1e-15 relative error, exact end-to-end bpm match
+on synthetic test cases.
+Ran across the full 410-file corpus (real+selfrecorded+synthetic) in 16s: 384/410 files got a
+computable mean.
+
+============================================================
+5. PCG_VISUALIZER LIVE STATE -- currently combo 11
+============================================================
+File: pcg_visualizer/index.html (not a git repo, no server currently running)
+CURRENT LIVE SETTINGS: combo 11's 23 DSP params (from the full 256-combo sweep -- NOT one of the 8
+finalists, so no tuned combine exists for it) + combine params RESET to SHIPPED_COMBINE.
+WIN=10 (raised from the original 8 back on 2026-07-26/27 across two separate combo loads whose
+single_win_max exceeded 8 -- combo 255's manual-experiment precursor, then combo 179; combo 11's own
+single_win_max=8.91 fits within 10 fine, no further change needed).
+Every changed constant has an inline comment naming which combo it came from and the date, so the
+provenance trail is readable directly in the file. Order of combos loaded into the visualizer this
+session: combo 0 (SHIPPED baseline) -> combo 255+tuned combine (the sweep winner) -> manual
+SINGLE_WIN_MAX/CONS_WAIT_S experiment (reverted) -> back to combo 0 -> combo 255+tuned combine again
+-> combo 179 -> combo 11 (current).
+Verification method used throughout: esprima parse (via anaconda python) + bracket-balance count +
+direct value cross-check against each combo's target dict -- no live browser test was done (no dev
+server running), so the actual rendered behavior in a browser has NOT been confirmed this session.
+
+============================================================
+6. PUBLISHED ARTIFACT (scatter plot)
+============================================================
+URL: https://claude.ai/code/artifact/bf28c0ce-9568-4d86-8321-8f382e984ba1
+Contents (3 selectable groups via a dropdown, plus two filter sliders on min-%-with-a-mean and
+min-%-within-5bpm):
+  - Finalists (8 combos, winning tuned combine, 410-file corpus)
+  - Full sweep (all 256 combos, SHIPPED_COMBINE, 314-file corpus)
+  - Legacy algorithm (1 entry, fixed reference, 410-file corpus)
+Template source: saved at C:\Users\daniel\AppData\Local\Temp\claude\...\scratchpad\
+finalist_scatter_template.html (this is a TEMP directory tied to this session/environment -- if a
+future session needs to edit this artifact further, the template will need to be reconstructed from
+the published artifact's own HTML source, e.g. via WebFetch on the URL, rather than assumed to still
+exist on disk).
+
+============================================================
+7. BACKGROUND PROCESSES -- NONE ACTIVE
+============================================================
+Both the main sweep (PID 25616) and the sleep-prevention watcher (PID 37040) have exited normally.
+Confirmed via PowerShell (no python processes running) as of this save. Nothing needs to be
+paused/resumed to pick this up tomorrow -- everything currently on disk is a completed, static result.
+
+============================================================
+8. UPDATE (later same session): artifact_baseline_pctl VALIDATED AND LOCKED
+============================================================
+Dedicated controlled ablation run (artifact_baseline_pctl_validation.py, 13-point grid, every other
+param at SHIPPED_DSP, full 314-file corpus) -- see ARTIFACT_BASELINE_PCTL_VALIDATION_2026-07-27.txt.
+RESULT: pctl=0.35 beats shipped's old default (0.4231) on every axis: correct 67.0% vs 66.9%, half 333
+(same plateau), double 19 vs 33 (42% fewer) -- best badness of all 13 points tested.
+IMPORTANT CORRECTION to PARAMETER_IMPORTANCE_REPORT_2026-07-27.txt: that report's correlational
+finding for double_rate (higher pctl -> fewer doubles) was WRONG DIRECTION above ~pctl=0.35 -- the true
+relationship is non-monotonic (bottoms out ~0.10-0.35, gets worse again above ~0.40). Confirms the
+report's own caveat about confounding in a random sample.
+ACTIONS TAKEN: (1) pushed artifact_baseline_pctl=0.35 live to pcg_visualizer/index.html (was combo 11's
+0.393). (2) LOCKED for the next controlled sweep -- artifact_baseline_pctl should be FIXED at 0.35, not
+swept as a free variable, in the upcoming smaller/denser sweep over {cons_wait_s, single_win_min/max,
+teal_push_half_width, artifact_detect_mult} x {use_detrend, agreement_signal} (see section 7's plan;
+current_pipeline_algorithm.py already has both toggles added and regression-tested as of this session).
+
+============================================================
+9. ENGINEERING: two new toggles added to current_pipeline_algorithm.py -- DONE, REGRESSION-TESTED
+============================================================
+Per Daniel's request to make two previously-hardcoded structural choices sweepable:
+  - use_detrend (bool, default True): switches teal's own peak-pick between the detrended curve
+    (estimate_detrend_from_mw, shipped default) and the plain robust-autocorrelation peak (win_r
+    directly, skipping detrend). Renamed the local variable win_det -> win_teal throughout tick() to
+    reflect that it now holds either, generically.
+  - agreement_signal ('tilt'|'flux', default 'tilt'): switches the combine step's agreement partner
+    between the pitch-family tilt trace (shipped default) and envelope-flux (teal_flux_algorithm.
+    flux_bpm, reusing the already-computed seg_clean_ar -- no extra removeTransients/declick/decimate
+    cost). flux_clip (default 3.885613494876985, from the earlier signal-relationship analysis' own
+    best-tuned flux config) only matters when agreement_signal='flux'.
+  - Renamed tilt_bpm -> agreement_bpm internally to reflect it's not always literally tilt.
+  - Had to fix a circular import: teal_flux_algorithm.py imports FROM current_pipeline_algorithm.py at
+    module scope, so the new `from teal_flux_algorithm import flux_bpm` had to be a LOCAL import
+    inside tick()'s agreement_signal='flux' branch, not a top-level import.
+Both toggles default to reproducing today's exact shipped behavior -- a bare CurrentPipelineEstimator()
+is unchanged.
+REGRESSION TEST: re-scored combo 0 (SHIPPED_DSP) with the modified estimator. All 7 metrics that are
+ever actually printed/compared (correct, half, double, third, triple, other, no_display) matched the
+original run EXACTLY. The one apparent "mismatch" (two_thirds: 40 vs assumed 0) was traced to MY OWN
+regression script's flawed comparison baseline (two_thirds is a real category that fmt_totals() never
+prints, so my earlier log-parsing backfill had silently defaulted it to 0) -- verified via the
+arithmetic (17453+333+33+94+141+2038+5951=26043, and 26083-26043=40, exactly matching), not an actual
+code regression. Confidence: HIGH that the toggles are correctly wired with zero side effects on
+default behavior.
+
+============================================================
+10. DEDICATED SINGLE/JOINT-PARAMETER VALIDATION SWEEPS (controlled ablations, not correlational)
+============================================================
+Built dedicated_param_sweep.py: a GENERALIZED version of the artifact_baseline_pctl validation
+methodology -- BASE_DSP = SHIPPED_DSP with artifact_baseline_pctl=0.35 (this session's validated value,
+NOT the stale shipped 0.4231 -- important since artifact_detect_mult/artifact_extend_mult interact
+directly with whatever baseline scale pctl produces, so they need re-validating under the NEW fixed
+value). Takes a run_name arg, looks up a GRID (list of {param: value} override dicts, single-key for a
+solo sweep or multi-key for a joint sweep) from the RUNS dict in the script. Resume-safe (per-run
+progress pickle), writes DEDICATED_SWEEP_<NAME>_2026-07-27.txt with overall + per-band breakdown.
+
+Four runs defined and queued: cons_wait_s (DONE, see below), single_win (joint min+max, NOT YET RUN),
+teal_push_half_width (NOT YET RUN), artifact_detect_mult (NOT YET RUN).
+
+--- cons_wait_s: DONE ---
+13-point grid (1.0 to 8.0), all other params at BASE_DSP (pctl=0.35). Full results saved in
+DEDICATED_SWEEP_CONS_WAIT_S_2026-07-27.txt and dedicated_sweep_cons_wait_s_progress.pkl.
+
+MAJOR FINDING -- a CLIFF, not a smooth curve:
+  cons_wait_s   correct%   half   no_display%
+  1.0-3.5       ~52%       126-134   ~40%      (flat plateau, "short-wait" regime)
+  4.0 (shipped) 67.0%      333       22.8%     (best of all 13 points, right at the cliff edge)
+  4.5-8.0       65.6%->50.6% (declining)        233->255 (noisy)   25.4%->42.3% (rising)
+The jump between 3.5 and 4.0 is the single biggest change in the whole grid -- shipped's default sits
+right at the good edge of a cliff, not comfortably inside a stable plateau.
+
+MECHANISM (Daniel's hypothesis, confirmed correct via code inspection): single_win_min defaults to
+4.0s, and win_r (the autocorrelation result) requires len(seg_clean_ar) >= win_nsamp, where win_nsamp
+is based on win_sec, which equals EXACTLY single_win_min whenever the estimator is still in its "wait"
+period (since_event < frozen_wait_s, which starts at cons_wait_s). So whenever cons_wait_s <
+single_win_min, the algorithm starts ATTEMPTING to display before enough real audio has accumulated to
+fill the minimum window -- correctly returning no_display for a stretch, not "garbage," but insufficient
+data. Since onset/spike events reset this wait repeatedly through a recording (not just once at file
+start), the effect is a persistent plateau, not a one-time startup blip.
+NUANCE: the short-wait regime is not lower-quality per attempt -- half-rate AS A FRACTION OF DISPLAYED
+TICKS is actually lower below 4.0 (~0.8%) than at/above it (~1.6%). It's a coverage/quality-per-attempt
+tradeoff: short wait shows less but is pickier; once cons_wait_s clears single_win_min, it shows almost
+everything, including tougher windows a shorter wait would have skipped as no_display.
+
+NOT YET DONE (tomorrow's plan): a confirmatory test proposed but not yet run -- if the mechanism is
+really the cons_wait_s vs single_win_min ALIGNMENT (not cons_wait_s in isolation), then the cliff's
+LOCATION should move if single_win_min changes. E.g. single_win_min=2.0 with cons_wait_s=3.0 should
+land in the GOOD regime; single_win_min=6.0 with the same cons_wait_s=3.0 should reproduce the BAD
+regime. This should be run as part of (or just before) the single_win joint sweep tomorrow -- it's the
+single most informative next test, since it would either confirm or falsify the mechanism directly
+rather than just fitting a plausible story to one parameter's marginal sweep.
+
+============================================================
+NEXT STEPS FOR TOMORROW
+============================================================
+1. Run the single_win_min/single_win_max joint sweep (already queued in dedicated_param_sweep.py's
+   RUNS dict as "single_win") -- but FIRST or ALONGSIDE it, run the confirmatory cons_wait_s x
+   single_win_min cross-check described in section 10 to nail down the cliff mechanism definitively.
+2. Then teal_push_half_width (note: only matters when use_detrend=True -- validate within that world
+   specifically, since use_detrend=False will be part of the eventual larger factorial).
+3. Then artifact_detect_mult (re-validate now that artifact_baseline_pctl is fixed at the NEW 0.35, not
+   the old 0.4231, since these two interact in remove_transients()'s threshold formula).
+4. Once all four dedicated validations are done, build the smaller/denser controlled factorial sweep:
+   the validated/fixed values for artifact_baseline_pctl (and whichever of the other four turn out to
+   have a clear winner) x {use_detrend: True/False} x {agreement_signal: tilt/flux} -- much smaller
+   search space than the original 256-random-combo sweep, per Daniel's explicit request for a more
+   controlled approach next time.

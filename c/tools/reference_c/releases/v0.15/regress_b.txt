@@ -1,0 +1,25 @@
+
+=== FULL CORPUS TALLY (314 files, DISPLAYED-bpm classification) -- v0.15-b ===
+v0.14 baseline:  {'no_display': 4830, 'correct': 7816, 'half': 8, 'other': 407}
+v0.15-b:         {'no_display': 4830, 'correct': 7770, 'half': 12, 'other': 449}
+
+delta (candidate - baseline):
+       correct: -46
+          half: +4
+    no_display: +0
+         other: +42
+
+correct rate: baseline=59.84%  v0.15-b=59.49%  (n=13061 ticks)
+
+7/314 files had at least one tick's classification change:
+  unfiltered_iOS-v5_3_0__Core_500_20230814-173141_vN1aGFXq_2spedup (gt=186.9158878504673, doubled): baseline={'no_display': 34} -> v0.15-b={'no_display': 32, 'other': 2}
+  unfiltered_iOS-v5_4_0__Core_500_20231227-153855_cw09IA9q_2spedup (gt=180.18018018018017, doubled): baseline={'no_display': 17, 'correct': 17} -> v0.15-b={'no_display': 22, 'correct': 12}
+  unfiltered_iOS-v5_3_1__20230929-163144_z6xVb607 (gt=68.18181818181819, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-b={'no_display': 21, 'correct': 13}
+  unfiltered_iOS-v5_3_1__20230828-133053_YHs5Yapf (gt=60.851926977687626, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-b={'no_display': 16, 'correct': 18}
+  pcg_impulse_test_2026-07-24T23-51-09_pox57bpm (gt=57.0, selfrecorded): baseline={'no_display': 50, 'other': 10, 'correct': 31} -> v0.15-b={'no_display': 50, 'other': 25, 'correct': 12, 'half': 4}
+  pcg_impulse_test_2026-07-24T23-50-16_pox58bpm (gt=58.0, selfrecorded): baseline={'no_display': 55, 'correct': 22, 'other': 14} -> v0.15-b={'no_display': 36, 'other': 39, 'correct': 16}
+  pcg_impulse_test_2026-07-25T14-04-50_pox59bpm (gt=59.0, selfrecorded): baseline={'no_display': 16, 'correct': 72, 'other': 3} -> v0.15-b={'no_display': 19, 'correct': 69, 'other': 3}
+
+=== REAL RECORDINGS SANITY CHECK ===
+daniel_recovery_test.f32: baseline tail=54.8 (52 ticks)  v0.15-b tail=54.8 (52 ticks)
+daniel_offchest_test.f32: baseline tail=53.3 (54 ticks)  v0.15-b tail=53.3 (54 ticks)

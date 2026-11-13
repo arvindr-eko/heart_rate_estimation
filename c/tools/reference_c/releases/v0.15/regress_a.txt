@@ -1,0 +1,48 @@
+
+=== FULL CORPUS TALLY (314 files, DISPLAYED-bpm classification) -- v0.15-a ===
+v0.14 baseline:  {'no_display': 4830, 'correct': 7816, 'half': 8, 'other': 407}
+v0.15-a:         {'no_display': 4842, 'correct': 7713, 'half': 35, 'other': 471}
+
+delta (candidate - baseline):
+       correct: -103
+          half: +27
+    no_display: +12
+         other: +64
+
+correct rate: baseline=59.84%  v0.15-a=59.05%  (n=13061 ticks)
+
+43/314 files had at least one tick's classification change:
+  unfiltered_iOS-v5_2_1__20230725-175149_jiSSSnTR_2spedup (gt=179.1044776119403, doubled): baseline={'no_display': 25, 'half': 8, 'correct': 1} -> v0.15-a={'no_display': 26, 'half': 6, 'correct': 2}
+  unfiltered_iOS-v5_2_1__20230804-165542_tjMI_nUu_2spedup (gt=175.95307917888562, doubled): baseline={'no_display': 17, 'correct': 17} -> v0.15-a={'no_display': 13, 'correct': 21}
+  unfiltered_iOS-v5_3_0__Core_500_20230814-173141_vN1aGFXq_2spedup (gt=186.9158878504673, doubled): baseline={'no_display': 34} -> v0.15-a={'no_display': 16, 'other': 18}
+  unfiltered_iOS-v5_2_1_Eko_Core_500_20230823-141911__TZweZqJ (gt=69.52491309385863, regular): baseline={'no_display': 13, 'correct': 21} -> v0.15-a={'no_display': 15, 'correct': 19}
+  unfiltered_iOS-v5_2_1__20230713-151209_R_w2OaM5 (gt=68.49315068, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 13, 'correct': 21}
+  unfiltered_iOS-v5_3_1_Eko_Core_500_20230821-190238_mAQ8ZrOk (gt=90.09009009009009, regular): baseline={'no_display': 14, 'correct': 20} -> v0.15-a={'no_display': 12, 'correct': 22}
+  unfiltered_iOS-v5_3_1__20230927-165424_uTYJ9yUi (gt=70.75471698113208, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 13, 'correct': 21}
+  unfiltered_iOS-v5_3_1__20230925-160636_83ucYCxO (gt=111.731843575419, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 16, 'correct': 18}
+  unfiltered_iOS-v5_3_1__20230929-163144_z6xVb607 (gt=68.18181818181819, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 16, 'correct': 18}
+  unfiltered_iOS-v5_4_0_Eko_Core_500_20231213-143405_aB1f5yjB (gt=62.56517205422315, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 16, 'correct': 18}
+  unfiltered_iOS-v5_4_0_Eko_Core_500_20231215-152921_iCw8U-Nm (gt=77.61966364812419, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 15, 'correct': 19}
+  unfiltered_iOS-v5_4_0__20231017-125315_EKEPicE2 (gt=68.33712984, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 14, 'correct': 20}
+  unfiltered_iOS-v5_4_0__20231110-182609_NMHQGjzV (gt=75.56675062972292, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 16, 'correct': 18}
+  unfiltered_iOS-v5_4_0__20231117-165510_kr0te6Ns (gt=67.41573033707866, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 14, 'correct': 20}
+  unfiltered_iOS-v5_4_0__20231208-184221_UYyL1pQZ (gt=76.23888182973316, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 15, 'correct': 19}
+  unfiltered_iOS-v5_6_1_Eko_Core_500_20240227-154338_aU53r-5I (gt=69.04487917146145, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 14, 'correct': 20}
+  unfiltered_iOS-v5_7_1_Eko_Core_500_20240327-190227_xvX0INaE (gt=92.73570324574962, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 13, 'correct': 21}
+  unfiltered_iOS-v5_7_1__20240404-134042_F6nZTJyy (gt=58.47953216374269, regular): baseline={'no_display': 14, 'correct': 19, 'other': 1} -> v0.15-a={'no_display': 14, 'correct': 17, 'other': 3}
+  unfiltered_iOS-v5_2_1_Eko_Core_500_20230707-134327_VONS6OeE (gt=73.52941176470588, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 14, 'correct': 20}
+  unfiltered_iOS-v5_2_1__20230726-183354_uLcmlUDs (gt=56.71077504725898, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 15, 'correct': 19}
+  unfiltered_iOS-v5_3_1__20230828-133053_YHs5Yapf (gt=60.851926977687626, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 15, 'correct': 19}
+  unfiltered_iOS-v5_4_0__20231017-144506_nlANVstc (gt=71.09004739336493, regular): baseline={'no_display': 15, 'correct': 19} -> v0.15-a={'no_display': 16, 'correct': 18}
+  unfiltered_iOS-v5_4_0__20231026-130529_L1n0NKl5 (gt=62.95907660020986, regular): baseline={'no_display': 16, 'correct': 18} -> v0.15-a={'no_display': 17, 'correct': 17}
+  unfiltered_iOS-v5_4_0__20231110-192148_u4hexdiX (gt=79.15567282321899, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 15, 'correct': 19}
+  unfiltered_iOS-v5_6_1_Eko_Core_500_20240220-171953_vAZ2t2J5 (gt=60.36217303822938, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 16, 'correct': 18}
+  unfiltered_iOS-v5_15_0_ChowCore500_Core_500_20250128-152726_-VJxLRj5 (gt=110.7011070110701, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 15, 'correct': 19}
+  unfiltered_iOS-v5_20_0_ChowCore500_20250206-164849_WQtBFeFg (gt=85.83690987124463, regular): baseline={'no_display': 12, 'correct': 22} -> v0.15-a={'no_display': 13, 'correct': 21}
+  pcg_impulse_test_2026-07-24T23-39-54_pox62bpm (gt=62.0, selfrecorded): baseline={'no_display': 55, 'correct': 16, 'other': 20} -> v0.15-a={'no_display': 57, 'correct': 14, 'other': 20}
+  pcg_impulse_test_2026-07-24T23-35-22_pox82bpm (gt=82.0, selfrecorded): baseline={'no_display': 32, 'correct': 58, 'other': 1} -> v0.15-a={'no_display': 32, 'correct': 59}
+  pcg_impulse_test_2026-07-24T23-49-27_pox60bpm (gt=60.0, selfrecorded): baseline={'no_display': 17, 'correct': 74} -> v0.15-a={'no_display': 18, 'correct': 73}
+
+=== REAL RECORDINGS SANITY CHECK ===
+daniel_recovery_test.f32: baseline tail=54.8 (52 ticks)  v0.15-a tail=54.8 (52 ticks)
+daniel_offchest_test.f32: baseline tail=53.3 (54 ticks)  v0.15-a tail=53.3 (54 ticks)

@@ -1,0 +1,11 @@
+BROADBAND ENVELOPE CHECK -- 2026-07-31 (267s wall)
+
+=== baseline_3band ===
+  regular: n=23703  correct=16239 (68.5%)  half=178 double=19 third=26 triple=152 other=1904  no_display=5125 (21.6%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-15845.0, 5125)
+  doubled: n=2380  correct=1225 (51.5%)  half=155 double=0 third=68 triple=0 other=107  no_display=825 (34.7%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-915.0, 825)
+  synthetic: n=6528  correct=2229 (34.1%)  half=729 double=0 third=38 triple=0 other=307  no_display=3225 (49.4%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-771.0, 3225)
+
+=== broadband_hilbert ===
+  regular: n=23703  correct=10603 (44.7%)  half=1062 double=206 third=63 triple=450 other=5669  no_display=5096 (21.5%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-8067.0, 5096)
+  doubled: n=2380  correct=1035 (43.5%)  half=115 double=0 third=24 triple=0 other=396  no_display=810 (34.0%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-805.0, 810)
+  synthetic: n=6528  correct=2415 (37.0%)  half=583 double=0 third=24 triple=5 other=254  no_display=3247 (49.7%)  first_display=nans avg (n=0 files, never_displayed=0 [nan%])  badness=(-1249.0, 3247)

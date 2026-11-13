@@ -1,0 +1,42 @@
+WINNING DSP+COMBINE RECIPE from full_expanded_sweep.py's precompute run (2026-07-26)
+Source combo: DSP combo 255 (one of the Phase 1 top-8 finalists) + Phase 2 combine-weight tuning
+Corpus: 314 real+selfrecorded files (synthetic excluded, matching the sweep's own methodology)
+Precompute cross-check: the real full_expanded_sweep.py run (not precomputed) independently confirmed
+combo 255 in the same top-8, in the same rank order -- see the main run's own log for its own
+Phase 1.5/2 result once it finishes.
+
+RESULT: n=26083  correct=18598 (71.3%)  half=452 double=34 third=110 triple=117 other=1890
+        no_display=4814 (18.5%)  badness=(-17626.0, 4814)
+
+Comparison:
+  SHIPPED (combo 0, today's live settings): correct=17453 (66.9%), badness=(-16721.0, 5951)
+  Combo 80 alone (Phase-1 accuracy leader):  correct=18095 (69.4%), badness=(-16741.0, 4901)
+  THIS (combo 255 DSP + tuned combine):      correct=18598 (71.3%), badness=(-17626.0, 4814)  <- BEST
+
+Note: "BEST OVERALL (unconstrained tent)" and "BEST WITH TENT HELD AT SHIPPED (constrained)" landed on
+the IDENTICAL result -- the single best draw across all 8 finalists x 2000 combine draws happened to be
+one of the tent-locked "constrained" draws, so this result carries the lower overfit risk of the
+constrained search AND is simultaneously the best score found. No safety/accuracy tradeoff needed here.
+
+DSP PARAMS (combo 255):
+{'signal_onset_thresh': 0.0010692539944588424, 'onset_debounce_ticks': 9, 'spike_detect_mult': 16.081397597726983, 'transient_limit_mult': 7.996667037469161, 'artifact_detect_mult': 8.6156495866318, 'artifact_extend_mult': 7.324784236695649, 'artifact_baseline_pctl': 0.493073190783927, 'artifact_passes': 1, 'artifact_pad_samples': 29, 'robust_trim_frac': 0.16209360279079182, 'feat_clip': 1.6697549062154802, 'single_win_min': 2.9348986370288284, 'single_win_max': 5.747052276570496, 'teal_push_half_width': 27, 'cons_wait_s': 3.404224175808616, 'cons_wait_extra_s_per_bpm': 0.017423074983551945, 'pitch_bp_lo_hz': 14.730487124998504, 'pitch_bp_hi_hz': 102.43390339142633, 'pitch_frame_ms': 25.35141836006737, 'pitch_hop_frac': 0.5885843611205083, 'pitch_gate_frac': 0.07013413034558733, 'pitch_fft_lo_hz': 23.66166392283781, 'pitch_fft_hi_hz': 203.0462229610422, 'tilt_split_hz': 34.44391555333309}
+
+COMBINE PARAMS (tent unchanged from shipped; trailing window/agreement/jump/delay retuned):
+{'weighted_med_trailing_n': 34, 'agreement_bpm_tol': 19.121085951351926, 'agree_bonus': 7.025299289125067, 'teal_jump_ratio': 2.0530771857007233, 'teal_jump_confirm_ticks': 4, 'teal_bpm_delay_slope': 0.005398469589789878, 'tent_peak_bpm': 55.9, 'tent_peak_h': 2.29, 'tent_lo_h': 0.56, 'tent_hi_h': 0.81}
+
+BAND BREAKDOWN:
+      [under60] : n=7127  correct=5247 (73.6%)  half=0 double=34 third=0 triple=117 other=780  no_display=929 (13.0%)  badness=(-5179.0, 929)
+      [60-90] : n=12066  correct=8889 (73.7%)  half=21 double=0 third=0 triple=0 other=763  no_display=2348 (19.5%)  badness=(-8847.0, 2348)
+      [90-120] : n=2674  correct=1941 (72.6%)  half=78 double=0 third=0 triple=0 other=99  no_display=556 (20.8%)  badness=(-1785.0, 556)
+      [120-160] : n=1768  correct=1223 (69.2%)  half=34 double=0 third=20 triple=0 other=101  no_display=389 (22.0%)  badness=(-1155.0, 389)
+      [160plus] : n=2448  correct=1298 (53.0%)  half=319 double=0 third=90 triple=0 other=147  no_display=592 (24.2%)  badness=(-660.0, 592)
+      -- 160plus remains the weak band (as it has been throughout this project's history), but every
+      other band improved over shipped.
+
+STATUS AS OF THIS WRITE: applied live to pcg_visualizer/index.html (see that file's own inline
+comments at each changed constant for exact before/after values and date).
+
+Supporting files (may be cleaned up over time -- this file is the durable record):
+  full_expanded_sweep_PRECOMPUTE_raw_logs.pkl   (raw per-tick logs for all 8 finalists, ~3.75MB)
+  full_expanded_sweep_PRECOMPUTE_phase2_checkpoint.txt
+  precompute_phase15_phase2.log

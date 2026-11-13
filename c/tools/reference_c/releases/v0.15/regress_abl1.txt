@@ -1,0 +1,33 @@
+
+=== FULL CORPUS TALLY (314 files, DISPLAYED-bpm classification) -- abl1_ctxonly ===
+v0.14 baseline:  {'no_display': 4830, 'correct': 7816, 'half': 8, 'other': 407}
+abl1_ctxonly:         {'no_display': 4821, 'correct': 7800, 'half': 8, 'other': 416, 'double': 16}
+
+delta (candidate - baseline):
+       correct: -16
+        double: +16
+          half: +0
+    no_display: -9
+         other: +9
+
+correct rate: baseline=59.84%  abl1_ctxonly=59.72%  (n=13061 ticks)
+
+14/314 files had at least one tick's classification change:
+  unfiltered_iOS-v5_2_1__20230804-165542_tjMI_nUu_2spedup (gt=175.95307917888562, doubled): baseline={'no_display': 17, 'correct': 17} -> abl1_ctxonly={'no_display': 13, 'correct': 21}
+  unfiltered_iOS-v5_3_1_Eko_Core_500_20230821-190238_mAQ8ZrOk (gt=90.09009009009009, regular): baseline={'no_display': 14, 'correct': 20} -> abl1_ctxonly={'no_display': 12, 'correct': 22}
+  unfiltered_iOS-v5_7_1_Eko_Core_500_20240327-190227_xvX0INaE (gt=92.73570324574962, regular): baseline={'no_display': 12, 'correct': 22} -> abl1_ctxonly={'no_display': 13, 'correct': 21}
+  unfiltered_iOS-v5_7_1__20240404-134042_F6nZTJyy (gt=58.47953216374269, regular): baseline={'no_display': 14, 'correct': 19, 'other': 1} -> abl1_ctxonly={'no_display': 14, 'correct': 17, 'other': 3}
+  unfiltered_iOS-v5_15_0_ChowCore500_Core_500_20250128-152726_-VJxLRj5 (gt=110.7011070110701, regular): baseline={'no_display': 12, 'correct': 22} -> abl1_ctxonly={'no_display': 16, 'correct': 18}
+  unfiltered_iOS-v5_20_0_ChowCore500_20250206-164849_WQtBFeFg (gt=85.83690987124463, regular): baseline={'no_display': 12, 'correct': 22} -> abl1_ctxonly={'no_display': 13, 'correct': 21}
+  pcg_impulse_test_2026-07-24T23-39-54_pox62bpm (gt=62.0, selfrecorded): baseline={'no_display': 55, 'correct': 16, 'other': 20} -> abl1_ctxonly={'no_display': 56, 'correct': 15, 'other': 20}
+  pcg_impulse_test_2026-07-24T23-35-22_pox82bpm (gt=82.0, selfrecorded): baseline={'no_display': 32, 'correct': 58, 'other': 1} -> abl1_ctxonly={'no_display': 32, 'correct': 59}
+  pcg_impulse_test_2026-07-24T23-51-09_pox57bpm (gt=57.0, selfrecorded): baseline={'no_display': 50, 'other': 10, 'correct': 31} -> abl1_ctxonly={'no_display': 51, 'other': 10, 'correct': 30}
+  pcg_impulse_test_2026-07-24T23-50-16_pox58bpm (gt=58.0, selfrecorded): baseline={'no_display': 55, 'correct': 22, 'other': 14} -> abl1_ctxonly={'no_display': 42, 'double': 16, 'other': 18, 'correct': 15}
+  pcg_impulse_test_2026-07-25T14-05-41_pox59bpm (gt=59.0, selfrecorded): baseline={'no_display': 44, 'correct': 47} -> abl1_ctxonly={'no_display': 45, 'correct': 46}
+  pcg_impulse_test_2026-07-25T14-04-50_pox59bpm (gt=59.0, selfrecorded): baseline={'no_display': 16, 'correct': 72, 'other': 3} -> abl1_ctxonly={'no_display': 18, 'correct': 70, 'other': 3}
+  pcg_impulse_test_2026-07-25T13-55-28_pox50bpm (gt=50.0, selfrecorded): baseline={'no_display': 32, 'correct': 50, 'other': 10} -> abl1_ctxonly={'no_display': 32, 'correct': 46, 'other': 14}
+  pcg_impulse_test_2026-07-25T14-08-37_pox52bpm (gt=52.0, selfrecorded): baseline={'no_display': 13, 'correct': 78} -> abl1_ctxonly={'no_display': 12, 'correct': 79}
+
+=== REAL RECORDINGS SANITY CHECK ===
+daniel_recovery_test.f32: baseline tail=54.8 (52 ticks)  abl1_ctxonly tail=54.8 (52 ticks)
+daniel_offchest_test.f32: baseline tail=53.3 (54 ticks)  abl1_ctxonly tail=53.3 (54 ticks)

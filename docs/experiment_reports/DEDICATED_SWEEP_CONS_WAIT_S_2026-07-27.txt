@@ -1,0 +1,107 @@
+DEDICATED SWEEP: cons_wait_s -- 2026-07-27
+Controlled ablation: every other DSP param fixed at SHIPPED_DSP (with artifact_baseline_pctl=0.35, this session's validated value, not the stale 0.4231), SHIPPED_COMBINE, 314-file corpus.
+
+{'cons_wait_s': 1.0}
+  overall: : n=26083  correct=13552 (52.0%)  half=134 double=11 third=33 triple=92 other=1775  no_display=10448 (40.1%)  badness=(-13262.0, 10448)
+    [under60] : n=7127  correct=4207 (59.0%)  half=0 double=1 third=0 triple=92 other=798  no_display=2006 (28.1%)  badness=(-4205.0, 2006)
+    [60-90] : n=12066  correct=6292 (52.1%)  half=32 double=10 third=0 triple=0 other=783  no_display=4949 (41.0%)  badness=(-6208.0, 4949)
+    [90-120] : n=2674  correct=1342 (50.2%)  half=21 double=0 third=0 triple=0 other=93  no_display=1203 (45.0%)  badness=(-1300.0, 1203)
+    [120-160] : n=1768  correct=794 (44.9%)  half=2 double=0 third=15 triple=0 other=29  no_display=928 (52.5%)  badness=(-790.0, 928)
+    [160plus] : n=2448  correct=917 (37.5%)  half=79 double=0 third=18 triple=0 other=72  no_display=1362 (55.6%)  badness=(-759.0, 1362)
+
+{'cons_wait_s': 1.5}
+  overall: : n=26083  correct=13594 (52.1%)  half=134 double=15 third=33 triple=92 other=1731  no_display=10446 (40.0%)  badness=(-13296.0, 10446)
+    [under60] : n=7127  correct=4241 (59.5%)  half=0 double=1 third=0 triple=92 other=773  no_display=1997 (28.0%)  badness=(-4239.0, 1997)
+    [60-90] : n=12066  correct=6302 (52.2%)  half=32 double=14 third=0 triple=0 other=764  no_display=4954 (41.1%)  badness=(-6210.0, 4954)
+    [90-120] : n=2674  correct=1342 (50.2%)  half=21 double=0 third=0 triple=0 other=93  no_display=1203 (45.0%)  badness=(-1300.0, 1203)
+    [120-160] : n=1768  correct=794 (44.9%)  half=2 double=0 third=15 triple=0 other=29  no_display=928 (52.5%)  badness=(-790.0, 928)
+    [160plus] : n=2448  correct=915 (37.4%)  half=79 double=0 third=18 triple=0 other=72  no_display=1364 (55.7%)  badness=(-757.0, 1364)
+
+{'cons_wait_s': 2.0}
+  overall: : n=26083  correct=13607 (52.2%)  half=126 double=11 third=33 triple=92 other=1717  no_display=10459 (40.1%)  badness=(-13333.0, 10459)
+    [under60] : n=7127  correct=4248 (59.6%)  half=0 double=1 third=0 triple=92 other=762  no_display=2001 (28.1%)  badness=(-4246.0, 2001)
+    [60-90] : n=12066  correct=6310 (52.3%)  half=32 double=10 third=0 triple=0 other=755  no_display=4959 (41.1%)  badness=(-6226.0, 4959)
+    [90-120] : n=2674  correct=1342 (50.2%)  half=13 double=0 third=0 triple=0 other=99  no_display=1205 (45.1%)  badness=(-1316.0, 1205)
+    [120-160] : n=1768  correct=794 (44.9%)  half=2 double=0 third=15 triple=0 other=29  no_display=928 (52.5%)  badness=(-790.0, 928)
+    [160plus] : n=2448  correct=913 (37.3%)  half=79 double=0 third=18 triple=0 other=72  no_display=1366 (55.8%)  badness=(-755.0, 1366)
+
+{'cons_wait_s': 2.5}
+  overall: : n=26083  correct=13645 (52.3%)  half=126 double=27 third=33 triple=92 other=1680  no_display=10434 (40.0%)  badness=(-13339.0, 10434)
+    [under60] : n=7127  correct=4254 (59.7%)  half=0 double=1 third=0 triple=92 other=766  no_display=1991 (27.9%)  badness=(-4252.0, 1991)
+    [60-90] : n=12066  correct=6344 (52.6%)  half=32 double=26 third=0 triple=0 other=719  no_display=4937 (40.9%)  badness=(-6228.0, 4937)
+    [90-120] : n=2674  correct=1342 (50.2%)  half=13 double=0 third=0 triple=0 other=94  no_display=1210 (45.3%)  badness=(-1316.0, 1210)
+    [120-160] : n=1768  correct=794 (44.9%)  half=2 double=0 third=15 triple=0 other=29  no_display=928 (52.5%)  badness=(-790.0, 928)
+    [160plus] : n=2448  correct=911 (37.2%)  half=79 double=0 third=18 triple=0 other=72  no_display=1368 (55.9%)  badness=(-753.0, 1368)
+
+{'cons_wait_s': 3.0}
+  overall: : n=26083  correct=13636 (52.3%)  half=126 double=13 third=33 triple=92 other=1694  no_display=10451 (40.1%)  badness=(-13358.0, 10451)
+    [under60] : n=7127  correct=4249 (59.6%)  half=0 double=1 third=0 triple=92 other=748  no_display=2014 (28.3%)  badness=(-4247.0, 2014)
+    [60-90] : n=12066  correct=6342 (52.6%)  half=32 double=12 third=0 triple=0 other=753  no_display=4927 (40.8%)  badness=(-6254.0, 4927)
+    [90-120] : n=2674  correct=1342 (50.2%)  half=13 double=0 third=0 triple=0 other=92  no_display=1212 (45.3%)  badness=(-1316.0, 1212)
+    [120-160] : n=1768  correct=794 (44.9%)  half=2 double=0 third=15 triple=0 other=29  no_display=928 (52.5%)  badness=(-790.0, 928)
+    [160plus] : n=2448  correct=909 (37.1%)  half=79 double=0 third=18 triple=0 other=72  no_display=1370 (56.0%)  badness=(-751.0, 1370)
+
+{'cons_wait_s': 3.5}
+  overall: : n=26083  correct=13633 (52.3%)  half=131 double=11 third=33 triple=92 other=1669  no_display=10470 (40.1%)  badness=(-13349.0, 10470)
+    [under60] : n=7127  correct=4251 (59.6%)  half=0 double=1 third=0 triple=92 other=741  no_display=2013 (28.2%)  badness=(-4249.0, 2013)
+    [60-90] : n=12066  correct=6368 (52.8%)  half=37 double=10 third=0 triple=0 other=737  no_display=4914 (40.7%)  badness=(-6274.0, 4914)
+    [90-120] : n=2674  correct=1342 (50.2%)  half=13 double=0 third=0 triple=0 other=90  no_display=1214 (45.4%)  badness=(-1316.0, 1214)
+    [120-160] : n=1768  correct=794 (44.9%)  half=2 double=0 third=15 triple=0 other=29  no_display=928 (52.5%)  badness=(-790.0, 928)
+    [160plus] : n=2448  correct=878 (35.9%)  half=79 double=0 third=18 triple=0 other=72  no_display=1401 (57.2%)  badness=(-720.0, 1401)
+
+{'cons_wait_s': 4.0}  <- SHIPPED
+  overall: : n=26083  correct=17464 (67.0%)  half=333 double=19 third=94 triple=152 other=2011  no_display=5950 (22.8%)  badness=(-16760.0, 5950)
+    [under60] : n=7127  correct=4917 (69.0%)  half=0 double=1 third=0 triple=152 other=881  no_display=1143 (16.0%)  badness=(-4915.0, 1143)
+    [60-90] : n=12066  correct=8375 (69.4%)  half=89 double=18 third=0 triple=0 other=835  no_display=2734 (22.7%)  badness=(-8161.0, 2734)
+    [90-120] : n=2674  correct=1800 (67.3%)  half=52 double=0 third=5 triple=0 other=118  no_display=687 (25.7%)  badness=(-1696.0, 687)
+    [120-160] : n=1768  correct=1117 (63.2%)  half=37 double=0 third=9 triple=0 other=70  no_display=535 (30.3%)  badness=(-1043.0, 535)
+    [160plus] : n=2448  correct=1255 (51.3%)  half=155 double=0 third=80 triple=0 other=107  no_display=851 (34.8%)  badness=(-945.0, 851)
+
+{'cons_wait_s': 4.5}
+  overall: : n=26083  correct=17100 (65.6%)  half=231 double=15 third=30 triple=168 other=1843  no_display=6616 (25.4%)  badness=(-16608.0, 6616)
+    [under60] : n=7127  correct=4868 (68.3%)  half=0 double=1 third=0 triple=168 other=793  no_display=1264 (17.7%)  badness=(-4866.0, 1264)
+    [60-90] : n=12066  correct=8124 (67.3%)  half=52 double=14 third=0 triple=0 other=782  no_display=3059 (25.4%)  badness=(-7992.0, 3059)
+    [90-120] : n=2674  correct=1752 (65.5%)  half=47 double=0 third=0 triple=0 other=99  no_display=764 (28.6%)  badness=(-1658.0, 764)
+    [120-160] : n=1768  correct=1088 (61.5%)  half=16 double=0 third=9 triple=0 other=65  no_display=590 (33.4%)  badness=(-1056.0, 590)
+    [160plus] : n=2448  correct=1268 (51.8%)  half=116 double=0 third=21 triple=0 other=104  no_display=939 (38.4%)  badness=(-1036.0, 939)
+
+{'cons_wait_s': 5.0}
+  overall: : n=26083  correct=16577 (63.6%)  half=246 double=11 third=43 triple=159 other=1740  no_display=7230 (27.7%)  badness=(-16063.0, 7230)
+    [under60] : n=7127  correct=4774 (67.0%)  half=0 double=1 third=0 triple=159 other=781  no_display=1382 (19.4%)  badness=(-4772.0, 1382)
+    [60-90] : n=12066  correct=7895 (65.4%)  half=48 double=10 third=0 triple=0 other=715  no_display=3362 (27.9%)  badness=(-7779.0, 3362)
+    [90-120] : n=2674  correct=1675 (62.6%)  half=56 double=0 third=0 triple=0 other=97  no_display=835 (31.2%)  badness=(-1563.0, 835)
+    [120-160] : n=1768  correct=1031 (58.3%)  half=24 double=0 third=9 triple=0 other=66  no_display=638 (36.1%)  badness=(-983.0, 638)
+    [160plus] : n=2448  correct=1202 (49.1%)  half=118 double=0 third=34 triple=0 other=81  no_display=1013 (41.4%)  badness=(-966.0, 1013)
+
+{'cons_wait_s': 5.5}
+  overall: : n=26083  correct=16010 (61.4%)  half=212 double=39 third=43 triple=135 other=1723  no_display=7882 (30.2%)  badness=(-15508.0, 7882)
+    [under60] : n=7127  correct=4647 (65.2%)  half=0 double=29 third=0 triple=135 other=781  no_display=1522 (21.4%)  badness=(-4589.0, 1522)
+    [60-90] : n=12066  correct=7617 (63.1%)  half=49 double=10 third=0 triple=0 other=683  no_display=3681 (30.5%)  badness=(-7499.0, 3681)
+    [90-120] : n=2674  correct=1640 (61.3%)  half=35 double=0 third=0 triple=0 other=91  no_display=908 (34.0%)  badness=(-1570.0, 908)
+    [120-160] : n=1768  correct=966 (54.6%)  half=32 double=0 third=23 triple=0 other=65  no_display=682 (38.6%)  badness=(-902.0, 682)
+    [160plus] : n=2448  correct=1140 (46.6%)  half=96 double=0 third=20 triple=0 other=103  no_display=1089 (44.5%)  badness=(-948.0, 1089)
+
+{'cons_wait_s': 6.0}
+  overall: : n=26083  correct=15499 (59.4%)  half=179 double=25 third=52 triple=127 other=1659  no_display=8518 (32.7%)  badness=(-15091.0, 8518)
+    [under60] : n=7127  correct=4589 (64.4%)  half=0 double=1 third=0 triple=127 other=747  no_display=1650 (23.2%)  badness=(-4587.0, 1650)
+    [60-90] : n=12066  correct=7332 (60.8%)  half=37 double=24 third=0 triple=0 other=668  no_display=3994 (33.1%)  badness=(-7210.0, 3994)
+    [90-120] : n=2674  correct=1585 (59.3%)  half=29 double=0 third=5 triple=0 other=75  no_display=980 (36.6%)  badness=(-1527.0, 980)
+    [120-160] : n=1768  correct=907 (51.3%)  half=36 double=0 third=24 triple=0 other=70  no_display=731 (41.3%)  badness=(-835.0, 731)
+    [160plus] : n=2448  correct=1086 (44.4%)  half=77 double=0 third=23 triple=0 other=99  no_display=1163 (47.5%)  badness=(-932.0, 1163)
+
+{'cons_wait_s': 7.0}
+  overall: : n=26083  correct=14367 (55.1%)  half=182 double=11 third=48 triple=83 other=1629  no_display=9745 (37.4%)  badness=(-13981.0, 9745)
+    [under60] : n=7127  correct=4398 (61.7%)  half=0 double=1 third=0 triple=83 other=732  no_display=1900 (26.7%)  badness=(-4396.0, 1900)
+    [60-90] : n=12066  correct=6748 (55.9%)  half=29 double=10 third=0 triple=0 other=664  no_display=4610 (38.2%)  badness=(-6670.0, 4610)
+    [90-120] : n=2674  correct=1449 (54.2%)  half=19 double=0 third=0 triple=0 other=81  no_display=1125 (42.1%)  badness=(-1411.0, 1125)
+    [120-160] : n=1768  correct=829 (46.9%)  half=20 double=0 third=9 triple=0 other=56  no_display=854 (48.3%)  badness=(-789.0, 854)
+    [160plus] : n=2448  correct=943 (38.5%)  half=114 double=0 third=39 triple=0 other=96  no_display=1256 (51.3%)  badness=(-715.0, 1256)
+
+{'cons_wait_s': 8.0}
+  overall: : n=26083  correct=13210 (50.6%)  half=255 double=12 third=43 triple=56 other=1456  no_display=11033 (42.3%)  badness=(-12676.0, 11033)
+    [under60] : n=7127  correct=4270 (59.9%)  half=0 double=2 third=0 triple=56 other=672  no_display=2114 (29.7%)  badness=(-4266.0, 2114)
+    [60-90] : n=12066  correct=6126 (50.8%)  half=33 double=10 third=0 triple=0 other=593  no_display=5300 (43.9%)  badness=(-6040.0, 5300)
+    [90-120] : n=2674  correct=1292 (48.3%)  half=30 double=0 third=0 triple=0 other=81  no_display=1271 (47.5%)  badness=(-1232.0, 1271)
+    [120-160] : n=1768  correct=699 (39.5%)  half=73 double=0 third=8 triple=0 other=44  no_display=944 (53.4%)  badness=(-553.0, 944)
+    [160plus] : n=2448  correct=823 (33.6%)  half=119 double=0 third=35 triple=0 other=66  no_display=1404 (57.4%)  badness=(-585.0, 1404)
+

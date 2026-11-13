@@ -1,0 +1,18 @@
+HARMONIC VETO SHIP VALIDATION (bare CurrentPipelineEstimator defaults) -- 2026-07-31 (251s wall)
+
+old_behavior_no_veto: n=26083  correct=17453 (66.9%)  half=333 double=33 third=94 triple=141 other=2038  no_display=5951 (22.8%)  first_display=4.64s avg (n=311 files, never_displayed=3 [1.0%])  badness=(-16721.0, 5951)
+new_shipped_default_veto: n=26083  correct=17702 (67.9%)  half=339 double=9 third=97 triple=26 other=1434  no_display=6452 (24.7%)  first_display=5.04s avg (n=311 files, never_displayed=3 [1.0%])  badness=(-17006.0, 6452)
+
+=== BY BAND ===
+-- old_behavior_no_veto --
+  under60: n=7127  correct=4909 (68.9%)  half=0 double=15 third=0 triple=141 other=905  no_display=1144 (16.1%)  first_display=4.46s avg (n=62 files, never_displayed=0 [0.0%])  badness=(-4879.0, 1144)
+  60-90: n=12066  correct=8372 (69.4%)  half=89 double=18 third=0 triple=0 other=838  no_display=2734 (22.7%)  first_display=4.45s avg (n=153 files, never_displayed=1 [0.6%])  badness=(-8158.0, 2734)
+  90-120: n=2674  correct=1800 (67.3%)  half=52 double=0 third=5 triple=0 other=118  no_display=687 (25.7%)  first_display=4.77s avg (n=36 files, never_displayed=0 [0.0%])  badness=(-1696.0, 687)
+  120-160: n=1768  correct=1117 (63.2%)  half=37 double=0 third=9 triple=0 other=70  no_display=535 (30.3%)  first_display=5.14s avg (n=26 files, never_displayed=0 [0.0%])  badness=(-1043.0, 535)
+  160plus: n=2448  correct=1255 (51.3%)  half=155 double=0 third=80 triple=0 other=107  no_display=851 (34.8%)  first_display=5.26s avg (n=34 files, never_displayed=2 [5.6%])  badness=(-945.0, 851)
+-- new_shipped_default_veto --
+  under60: n=7127  correct=5178 (72.7%)  half=0 double=0 third=0 triple=26 other=574  no_display=1349 (18.9%)  first_display=5.35s avg (n=62 files, never_displayed=0 [0.0%])  badness=(-5178.0, 1349)
+  60-90: n=12066  correct=8443 (70.0%)  half=90 double=9 third=0 triple=0 other=601  no_display=2917 (24.2%)  first_display=4.72s avg (n=153 files, never_displayed=1 [0.6%])  badness=(-8245.0, 2917)
+  90-120: n=2674  correct=1780 (66.6%)  half=62 double=0 third=5 triple=0 other=65  no_display=744 (27.8%)  first_display=5.17s avg (n=36 files, never_displayed=0 [0.0%])  badness=(-1656.0, 744)
+  120-160: n=1768  correct=1057 (59.8%)  half=35 double=0 third=12 triple=0 other=102  no_display=562 (31.8%)  first_display=5.40s avg (n=26 files, never_displayed=0 [0.0%])  badness=(-987.0, 562)
+  160plus: n=2448  correct=1244 (50.8%)  half=152 double=0 third=80 triple=0 other=92  no_display=880 (35.9%)  first_display=5.47s avg (n=34 files, never_displayed=2 [5.6%])  badness=(-940.0, 880)

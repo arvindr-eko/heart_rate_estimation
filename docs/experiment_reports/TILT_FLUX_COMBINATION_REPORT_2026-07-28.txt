@@ -1,0 +1,10 @@
+TILT+FLUX COMBINATION STRATEGY REPORT -- 2026-07-28
+Cached raw-log rescore (no DSP re-run), BASE DSP = SHIPPED_DSP with artifact_baseline_pctl=0.35, use_detrend=True, SHIPPED_COMBINE's other params.
+AGREE_BONUS=2.7, BOTH_BONUS=4.5, EITHER_BONUS_TIERED=1.8, W_TILT/W_FLUX=0.7/0.3, TOL=11.1
+
+tilt_only: n=26083 correct=17482 (67.0%) half=333 (1.3%) double=19 (0.1%) other=2337 no_display=5912 (22.7%) badness=-16778
+flux_only: n=26083 correct=17487 (67.0%) half=313 (1.2%) double=21 (0.1%) other=2350 no_display=5912 (22.7%) badness=-16819
+or_either: n=26083 correct=17477 (67.0%) half=333 (1.3%) double=19 (0.1%) other=2342 no_display=5912 (22.7%) badness=-16773
+and_both: n=26083 correct=17478 (67.0%) half=319 (1.2%) double=21 (0.1%) other=2353 no_display=5912 (22.7%) badness=-16798
+tiered: n=26083 correct=17482 (67.0%) half=325 (1.2%) double=21 (0.1%) other=2343 no_display=5912 (22.7%) badness=-16790
+weighted_blend: n=26083 correct=17485 (67.0%) half=332 (1.3%) double=18 (0.1%) other=2336 no_display=5912 (22.7%) badness=-16785

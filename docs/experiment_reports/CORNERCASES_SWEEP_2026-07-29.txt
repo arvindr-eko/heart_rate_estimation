@@ -1,0 +1,43 @@
+CORNERCASES SWEEP -- 2026-07-29 (deliberate overfit to 6 files, per Daniel's request)
+4 combos evaluated, 33s
+
+=== combo 0: mean_score=-0.130 ===
+  160bpm-1.wav: correct=22%  bad_octave=54%  first_correct=4.0s
+  180bpm-1.wav: correct=0%  bad_octave=62%  first_correct=never
+  60bpm-1.wav: correct=72%  bad_octave=0%  first_correct=12.5s
+  60bpm-2.wav: correct=76%  bad_octave=0%  first_correct=11.0s
+  90bpm-1.wav: correct=52%  bad_octave=2%  first_correct=4.0s
+  90bpm-2.wav: correct=26%  bad_octave=8%  first_correct=29.8s
+  dsp={'signal_onset_thresh': 0.00021, 'onset_debounce_ticks': 4, 'spike_detect_mult': 20, 'transient_limit_mult': 4.29, 'artifact_detect_mult': 16.96, 'artifact_extend_mult': 8.02, 'artifact_baseline_pctl': 0.35, 'artifact_passes': 5, 'artifact_pad_samples': 36, 'robust_trim_frac': 0.0079, 'feat_clip': 4.5, 'single_win_min': 4.0, 'single_win_max': 8.0, 'teal_push_half_width': 36, 'cons_wait_s': 4.0, 'cons_wait_extra_s_per_bpm': 0.02, 'pitch_bp_lo_hz': 17.18, 'pitch_bp_hi_hz': 175.17, 'pitch_frame_ms': 20.02, 'pitch_hop_frac': 0.422, 'pitch_gate_frac': 0.0658, 'pitch_fft_lo_hz': 14.27, 'pitch_fft_hi_hz': 226.82, 'tilt_split_hz': 45.06, 'use_detrend': True}
+  combine={'weighted_med_trailing_n': 8, 'agreement_bpm_tol': 3.2516432416682806, 'agree_bonus': 2.9856526466018183, 'tent_peak_bpm': 55.9, 'tent_peak_h': 2.29, 'tent_lo_h': 0.56, 'tent_hi_h': 0.81, 'teal_jump_ratio': 1.4, 'teal_jump_confirm_ticks': 1, 'teal_bpm_delay_slope': 0.0}
+
+=== combo 2: mean_score=-0.206 ===
+  160bpm-1.wav: correct=0%  bad_octave=51%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=49%  first_correct=never
+  60bpm-1.wav: correct=65%  bad_octave=0%  first_correct=16.0s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=44%  bad_octave=25%  first_correct=14.0s
+  90bpm-2.wav: correct=24%  bad_octave=0%  first_correct=34.2s
+  dsp={'signal_onset_thresh': 0.0030405468736741433, 'onset_debounce_ticks': 9, 'spike_detect_mult': 16.27010217861537, 'transient_limit_mult': 4.185662198954799, 'artifact_detect_mult': 21.910988812176154, 'artifact_extend_mult': 2.2003219638458162, 'artifact_baseline_pctl': 0.4318668332799868, 'artifact_passes': 3, 'artifact_pad_samples': 21, 'robust_trim_frac': 0.25344967383890904, 'feat_clip': 4.555175184313185, 'single_win_min': 4.057858423901365, 'single_win_max': 7.503281174070979, 'teal_push_half_width': 31, 'cons_wait_s': 3.686937979333661, 'cons_wait_extra_s_per_bpm': 0.014115313082784338, 'pitch_bp_lo_hz': 27.74417418492915, 'pitch_bp_hi_hz': 173.40953149442606, 'pitch_frame_ms': 26.572538407306485, 'pitch_hop_frac': 0.6220471954690107, 'pitch_gate_frac': 0.04202003195189061, 'pitch_fft_lo_hz': 18.3641724032284, 'pitch_fft_hi_hz': 191.18771100568307, 'tilt_split_hz': 81.67373168785645}
+  combine={'weighted_med_trailing_n': 38, 'agreement_bpm_tol': 7.627547589290226, 'agree_bonus': 3.294120858189116, 'teal_jump_ratio': 2.1605674721654924, 'teal_jump_confirm_ticks': 5, 'teal_bpm_delay_slope': 0.13721940874407548, 'tent_peak_bpm': 89.75198990745699, 'tent_peak_h': 1.560330561706054, 'tent_lo_h': 0.4242318842188972, 'tent_hi_h': 1.416363476234335}
+
+=== combo 3: mean_score=-0.577 ===
+  160bpm-1.wav: correct=0%  bad_octave=63%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=66%  first_correct=never
+  60bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-2.wav: correct=30%  bad_octave=0%  first_correct=7.8s
+  90bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  90bpm-2.wav: correct=0%  bad_octave=0%  first_correct=never
+  dsp={'signal_onset_thresh': 0.004165242453174017, 'onset_debounce_ticks': 8, 'spike_detect_mult': 30.42055538585254, 'transient_limit_mult': 5.951168249453353, 'artifact_detect_mult': 10.340897442174793, 'artifact_extend_mult': 3.162292949913899, 'artifact_baseline_pctl': 0.442388145042401, 'artifact_passes': 5, 'artifact_pad_samples': 31, 'robust_trim_frac': 0.10882232758845428, 'feat_clip': 2.5965617079641072, 'single_win_min': 4.634844616662241, 'single_win_max': 11.571833680550277, 'teal_push_half_width': 21, 'cons_wait_s': 5.576363493975975, 'cons_wait_extra_s_per_bpm': 0.019228623224031946, 'pitch_bp_lo_hz': 18.664287507750018, 'pitch_bp_hi_hz': 124.16881188803252, 'pitch_frame_ms': 37.48816025896734, 'pitch_hop_frac': 0.4833446495360849, 'pitch_gate_frac': 0.07166445516202397, 'pitch_fft_lo_hz': 21.071041710087524, 'pitch_fft_hi_hz': 149.95403189606134, 'tilt_split_hz': 144.44126766584793}
+  combine={'weighted_med_trailing_n': 29, 'agreement_bpm_tol': 11.863705372627189, 'agree_bonus': 1.3969835624154425, 'teal_jump_ratio': 1.80448727403102, 'teal_jump_confirm_ticks': 2, 'teal_bpm_delay_slope': 0.05250878899762115, 'tent_peak_bpm': 94.49916459640994, 'tent_peak_h': 2.411599801231126, 'tent_lo_h': 1.019231386550633, 'tent_hi_h': 1.2722238849150005}
+
+=== combo 1: mean_score=-0.819 ===
+  160bpm-1.wav: correct=0%  bad_octave=63%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=65%  first_correct=never
+  60bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-2.wav: correct=0%  bad_octave=32%  first_correct=never
+  90bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  90bpm-2.wav: correct=0%  bad_octave=4%  first_correct=never
+  dsp={'signal_onset_thresh': 0.0001920867984105929, 'onset_debounce_ticks': 8, 'spike_detect_mult': 37.53437053038635, 'transient_limit_mult': 8.073276002001858, 'artifact_detect_mult': 11.39116956969054, 'artifact_extend_mult': 9.343257891565305, 'artifact_baseline_pctl': 0.29707871200856434, 'artifact_passes': 1, 'artifact_pad_samples': 91, 'robust_trim_frac': 0.11780666627849333, 'feat_clip': 6.638681137524042, 'single_win_min': 5.445701159552901, 'single_win_max': 8.142901500631424, 'teal_push_half_width': 57, 'cons_wait_s': 5.799139161522035, 'cons_wait_extra_s_per_bpm': 0.03462816337339041, 'pitch_bp_lo_hz': 24.28426348849765, 'pitch_bp_hi_hz': 89.32048069002445, 'pitch_frame_ms': 39.54760317302109, 'pitch_hop_frac': 0.5176369235724047, 'pitch_gate_frac': 0.08701126420348777, 'pitch_fft_lo_hz': 27.059175005763127, 'pitch_fft_hi_hz': 258.16702889355076, 'tilt_split_hz': 131.95141099601398}
+  combine={'weighted_med_trailing_n': 22, 'agreement_bpm_tol': 3.673806364486395, 'agree_bonus': 5.476109975618554, 'teal_jump_ratio': 2.1152196492551827, 'teal_jump_confirm_ticks': 3, 'teal_bpm_delay_slope': 0.002521302367746886, 'tent_peak_bpm': 77.3929433395669, 'tent_peak_h': 2.740447613131448, 'tent_lo_h': 1.4154680449938442, 'tent_hi_h': 0.7884673208385597}
+

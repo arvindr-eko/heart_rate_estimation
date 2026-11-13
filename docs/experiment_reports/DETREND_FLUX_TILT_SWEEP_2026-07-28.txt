@@ -1,0 +1,35 @@
+2x2 CATEGORICAL SWEEP: use_detrend x agreement_signal -- 2026-07-28
+BASE DSP: SHIPPED_DSP with artifact_baseline_pctl=0.35 (validated 2026-07-27). SHIPPED_COMBINE. 314-file corpus.
+
+{'agreement_signal': 'flux', 'use_detrend': False}
+  overall: : n=26083  correct=17253 (66.1%)  half=444 double=44 third=64 triple=182 other=2092  no_display=5945 (22.8%)  badness=(-16277.0, 5945)
+    [under60] : n=7127  correct=4846 (68.0%)  half=0 double=5 third=0 triple=182 other=919  no_display=1132 (15.9%)  badness=(-4836.0, 1132)
+    [60-90] : n=12066  correct=8223 (68.2%)  half=175 double=39 third=0 triple=0 other=892  no_display=2737 (22.7%)  badness=(-7795.0, 2737)
+    [90-120] : n=2674  correct=1763 (65.9%)  half=80 double=0 third=13 triple=0 other=116  no_display=686 (25.7%)  badness=(-1603.0, 686)
+    [120-160] : n=1768  correct=1098 (62.1%)  half=75 double=0 third=5 triple=0 other=64  no_display=526 (29.8%)  badness=(-948.0, 526)
+    [160plus] : n=2448  correct=1323 (54.0%)  half=114 double=0 third=46 triple=0 other=101  no_display=864 (35.3%)  badness=(-1095.0, 864)
+
+{'agreement_signal': 'flux', 'use_detrend': True}
+  overall: : n=26083  correct=17469 (67.0%)  half=313 double=21 third=80 triple=152 other=2017  no_display=5950 (22.8%)  badness=(-16801.0, 5950)
+    [under60] : n=7127  correct=4905 (68.8%)  half=0 double=3 third=0 triple=152 other=889  no_display=1143 (16.0%)  badness=(-4899.0, 1143)
+    [60-90] : n=12066  correct=8379 (69.4%)  half=71 double=18 third=0 triple=0 other=834  no_display=2734 (22.7%)  badness=(-8201.0, 2734)
+    [90-120] : n=2674  correct=1796 (67.2%)  half=54 double=0 third=5 triple=0 other=116  no_display=687 (25.7%)  badness=(-1688.0, 687)
+    [120-160] : n=1768  correct=1126 (63.7%)  half=32 double=0 third=5 triple=0 other=70  no_display=535 (30.3%)  badness=(-1062.0, 535)
+    [160plus] : n=2448  correct=1263 (51.6%)  half=156 double=0 third=70 triple=0 other=108  no_display=851 (34.8%)  badness=(-951.0, 851)
+
+{'agreement_signal': 'tilt', 'use_detrend': False}
+  overall: : n=26083  correct=17283 (66.3%)  half=448 double=33 third=71 triple=172 other=2074  no_display=5945 (22.8%)  badness=(-16321.0, 5945)
+    [under60] : n=7127  correct=4861 (68.2%)  half=0 double=5 third=0 triple=169 other=915  no_display=1132 (15.9%)  badness=(-4851.0, 1132)
+    [60-90] : n=12066  correct=8252 (68.4%)  half=173 double=28 third=0 triple=3 other=873  no_display=2737 (22.7%)  badness=(-7850.0, 2737)
+    [90-120] : n=2674  correct=1769 (66.2%)  half=74 double=0 third=15 triple=0 other=118  no_display=686 (25.7%)  badness=(-1621.0, 686)
+    [120-160] : n=1768  correct=1084 (61.3%)  half=85 double=0 third=7 triple=0 other=66  no_display=526 (29.8%)  badness=(-914.0, 526)
+    [160plus] : n=2448  correct=1317 (53.8%)  half=116 double=0 third=49 triple=0 other=102  no_display=864 (35.3%)  badness=(-1085.0, 864)
+
+{'agreement_signal': 'tilt', 'use_detrend': True}  <- SHIPPED COMBINATION
+  overall: : n=26083  correct=17464 (67.0%)  half=333 double=19 third=94 triple=152 other=2011  no_display=5950 (22.8%)  badness=(-16760.0, 5950)
+    [under60] : n=7127  correct=4917 (69.0%)  half=0 double=1 third=0 triple=152 other=881  no_display=1143 (16.0%)  badness=(-4915.0, 1143)
+    [60-90] : n=12066  correct=8375 (69.4%)  half=89 double=18 third=0 triple=0 other=835  no_display=2734 (22.7%)  badness=(-8161.0, 2734)
+    [90-120] : n=2674  correct=1800 (67.3%)  half=52 double=0 third=5 triple=0 other=118  no_display=687 (25.7%)  badness=(-1696.0, 687)
+    [120-160] : n=1768  correct=1117 (63.2%)  half=37 double=0 third=9 triple=0 other=70  no_display=535 (30.3%)  badness=(-1043.0, 535)
+    [160plus] : n=2448  correct=1255 (51.3%)  half=155 double=0 third=80 triple=0 other=107  no_display=851 (34.8%)  badness=(-945.0, 851)
+

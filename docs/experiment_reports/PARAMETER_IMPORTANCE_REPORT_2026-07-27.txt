@@ -1,0 +1,183 @@
+PARAMETER IMPORTANCE / LEVER REPORT -- 2026-07-27
+Based on all 256 completed Phase-1 combos, per-tick totals (n=26083 ticks/combo,
+SHIPPED_COMBINE, 314-file corpus) -- the sweep's own native units, not the scatter/per-file
+re-derivation (much better statistical power: 26,083 samples/combo vs ~314).
+
+METHOD: for each of the 23 DSP parameters, against each of 4 outcomes (display_rate = 1 -
+no_display fraction, half_rate, double_rate, correct_rate):
+  - Pearson correlation (r) across the 256 combos -- captures LINEAR/monotonic direction.
+  - Random Forest feature importance (500 trees, depth 6) -- captures non-linear/interaction
+    effects a correlation can miss entirely (a parameter can matter a lot with importance
+    high but correlation near 0, if its effect is non-monotonic -- e.g. a middle-value sweet
+    spot). RF importance is the PRIMARY significance ranking below; correlation supplies the
+    directional lever description where the relationship is reasonably monotonic.
+  - Tercile comparison: mean outcome in the lowest-third vs highest-third of that parameter's
+    values across the actual 256 sampled combos (not synthetic values) -- a concrete,
+    assumption-free 'what actually happened when this was low vs high' readout.
+
+CAVEAT: this is purely observational/correlational across a RANDOM sweep, not a controlled
+ablation -- parameters can be correlated with each other by chance in a finite random sample,
+so a lever identified here should be validated with a targeted follow-up sweep (hold other
+params fixed, vary this one deliberately) before fully trusting the causal direction.
+
+====================================================================================================
+TARGET: display_rate  (mean=0.444, std=0.250, min=0.009, max=0.818)
+====================================================================================================
+
+rank parameter                     RF importance    corr (r)   low-tercile  high-tercile   low->high delta
+1    cons_wait_s                          0.4268       0.381         0.292         0.523            +0.231
+2    single_win_max                       0.3794      -0.555         0.655         0.289            -0.366
+3    single_win_min                       0.1417      -0.510         0.580         0.295            -0.286
+4    spike_detect_mult                    0.0136       0.110         0.421         0.501            +0.079
+5    pitch_hop_frac                       0.0110       0.110         0.417         0.477            +0.060
+6    artifact_baseline_pctl               0.0026       0.127         0.400         0.483            +0.084
+7    robust_trim_frac                     0.0026      -0.005         0.434         0.435            +0.001
+8    pitch_fft_lo_hz                      0.0021       0.012         0.448         0.473            +0.025
+9    pitch_bp_hi_hz                       0.0020       0.015         0.446         0.446            +0.000
+10   signal_onset_thresh                  0.0017       0.044         0.437         0.445            +0.007
+11   pitch_fft_hi_hz                      0.0017      -0.007         0.459         0.450            -0.008
+12   teal_push_half_width                 0.0016      -0.027         0.450         0.443            -0.006
+13   cons_wait_extra_s_per_bpm            0.0015      -0.127         0.460         0.406            -0.054
+14   pitch_gate_frac                      0.0015       0.037         0.410         0.448            +0.038
+15   artifact_extend_mult                 0.0015      -0.017         0.428         0.443            +0.014
+16   artifact_detect_mult                 0.0013      -0.027         0.468         0.444            -0.024
+17   tilt_split_hz                        0.0012       0.022         0.435         0.456            +0.021
+18   pitch_frame_ms                       0.0011       0.043         0.427         0.434            +0.007
+19   pitch_bp_lo_hz                       0.0011      -0.053         0.474         0.444            -0.029
+20   feat_clip                            0.0011       0.049         0.443         0.477            +0.034
+21   artifact_pad_samples                 0.0010      -0.018         0.438         0.450            +0.012
+22   transient_limit_mult                 0.0009       0.013         0.441         0.454            +0.013
+23   artifact_passes                      0.0006       0.017         0.461         0.480            +0.019
+24   onset_debounce_ticks                 0.0005      -0.002         0.459         0.466            +0.007
+
+====================================================================================================
+TARGET: half_rate  (mean=0.019, std=0.016, min=0.000, max=0.076)
+====================================================================================================
+
+rank parameter                     RF importance    corr (r)   low-tercile  high-tercile   low->high delta
+1    artifact_baseline_pctl               0.2680      -0.263         0.025         0.016            -0.009
+2    cons_wait_s                          0.1915       0.293         0.011         0.022            +0.012
+3    single_win_min                       0.1720      -0.357         0.026         0.013            -0.012
+4    single_win_max                       0.0980      -0.327         0.025         0.012            -0.014
+5    teal_push_half_width                 0.0699      -0.140         0.023         0.018            -0.005
+6    artifact_detect_mult                 0.0598      -0.177         0.023         0.017            -0.006
+7    robust_trim_frac                     0.0191       0.031         0.018         0.019            +0.001
+8    artifact_pad_samples                 0.0135       0.101         0.017         0.021            +0.005
+9    spike_detect_mult                    0.0116       0.089         0.018         0.021            +0.003
+10   artifact_extend_mult                 0.0101      -0.058         0.020         0.018            -0.002
+11   pitch_hop_frac                       0.0100       0.052         0.019         0.021            +0.001
+12   pitch_gate_frac                      0.0099       0.067         0.016         0.020            +0.004
+13   pitch_fft_hi_hz                      0.0093       0.018         0.020         0.020            -0.001
+14   tilt_split_hz                        0.0080       0.059         0.018         0.021            +0.003
+15   pitch_bp_lo_hz                       0.0076      -0.016         0.020         0.019            -0.001
+16   signal_onset_thresh                  0.0073       0.082         0.019         0.020            +0.002
+17   pitch_fft_lo_hz                      0.0063       0.042         0.019         0.021            +0.002
+18   transient_limit_mult                 0.0061       0.050         0.018         0.020            +0.002
+19   pitch_frame_ms                       0.0046       0.019         0.018         0.018            +0.000
+20   pitch_bp_hi_hz                       0.0044       0.029         0.020         0.020            +0.000
+21   onset_debounce_ticks                 0.0038      -0.004         0.020         0.020            -0.000
+22   feat_clip                            0.0034      -0.010         0.021         0.020            -0.001
+23   cons_wait_extra_s_per_bpm            0.0032      -0.105         0.021         0.017            -0.004
+24   artifact_passes                      0.0026      -0.032         0.020         0.020            +0.000
+
+====================================================================================================
+TARGET: double_rate  (mean=0.002, std=0.002, min=0.000, max=0.021)
+====================================================================================================
+
+rank parameter                     RF importance    corr (r)   low-tercile  high-tercile   low->high delta
+1    artifact_baseline_pctl               0.3519      -0.260         0.003         0.002            -0.001
+2    teal_push_half_width                 0.1334       0.233         0.001         0.003            +0.001
+3    artifact_detect_mult                 0.1204      -0.256         0.003         0.001            -0.001
+4    robust_trim_frac                     0.0452       0.134         0.002         0.002            +0.001
+5    cons_wait_s                          0.0350       0.151         0.001         0.002            +0.001
+6    single_win_min                       0.0311      -0.053         0.002         0.002            -0.000
+7    single_win_max                       0.0278      -0.125         0.002         0.002            -0.001
+8    pitch_hop_frac                       0.0210       0.043         0.002         0.002            +0.000
+9    pitch_gate_frac                      0.0203       0.011         0.002         0.002            +0.000
+10   pitch_fft_hi_hz                      0.0200      -0.099         0.002         0.002            -0.001
+11   pitch_fft_lo_hz                      0.0199      -0.012         0.002         0.002            +0.000
+12   cons_wait_extra_s_per_bpm            0.0196      -0.042         0.002         0.002            -0.000
+13   feat_clip                            0.0187       0.011         0.002         0.002            +0.000
+14   spike_detect_mult                    0.0178       0.021         0.002         0.002            +0.000
+15   pitch_bp_hi_hz                       0.0169       0.013         0.002         0.002            +0.000
+16   pitch_bp_lo_hz                       0.0135      -0.006         0.002         0.002            +0.000
+17   signal_onset_thresh                  0.0124       0.075         0.002         0.002            +0.001
+18   artifact_pad_samples                 0.0124       0.087         0.002         0.002            +0.001
+19   onset_debounce_ticks                 0.0122      -0.053         0.002         0.002            -0.000
+20   pitch_frame_ms                       0.0118       0.004         0.002         0.002            +0.000
+21   transient_limit_mult                 0.0117       0.088         0.002         0.002            +0.000
+22   tilt_split_hz                        0.0114      -0.002         0.002         0.002            +0.000
+23   artifact_extend_mult                 0.0109       0.055         0.002         0.002            +0.000
+24   artifact_passes                      0.0047       0.018         0.002         0.002            +0.000
+
+====================================================================================================
+TARGET: correct_rate  (mean=0.344, std=0.211, min=0.005, max=0.694)
+====================================================================================================
+
+rank parameter                     RF importance    corr (r)   low-tercile  high-tercile   low->high delta
+1    cons_wait_s                          0.3877       0.376         0.224         0.413            +0.189
+2    single_win_max                       0.3385      -0.508         0.511         0.225            -0.286
+3    single_win_min                       0.1210      -0.479         0.450         0.220            -0.229
+4    artifact_baseline_pctl               0.0682       0.299         0.256         0.406            +0.150
+5    pitch_hop_frac                       0.0153       0.121         0.315         0.374            +0.059
+6    artifact_detect_mult                 0.0136       0.080         0.337         0.364            +0.027
+7    spike_detect_mult                    0.0121       0.109         0.328         0.397            +0.069
+8    teal_push_half_width                 0.0038      -0.011         0.342         0.340            -0.003
+9    robust_trim_frac                     0.0036      -0.022         0.339         0.334            -0.006
+10   pitch_fft_hi_hz                      0.0036      -0.012         0.351         0.347            -0.004
+11   pitch_bp_lo_hz                       0.0031      -0.066         0.371         0.339            -0.032
+12   tilt_split_hz                        0.0029       0.024         0.335         0.350            +0.016
+13   signal_onset_thresh                  0.0029       0.024         0.338         0.337            -0.001
+14   artifact_extend_mult                 0.0028      -0.002         0.321         0.345            +0.024
+15   transient_limit_mult                 0.0027      -0.030         0.351         0.343            -0.008
+16   artifact_pad_samples                 0.0027      -0.078         0.357         0.332            -0.024
+17   feat_clip                            0.0026       0.058         0.336         0.373            +0.038
+18   pitch_fft_lo_hz                      0.0026      -0.001         0.350         0.361            +0.011
+19   pitch_bp_hi_hz                       0.0025      -0.001         0.347         0.342            -0.004
+20   pitch_frame_ms                       0.0021       0.049         0.335         0.342            +0.007
+21   cons_wait_extra_s_per_bpm            0.0020      -0.111         0.352         0.313            -0.039
+22   pitch_gate_frac                      0.0017       0.028         0.320         0.343            +0.022
+23   onset_debounce_ticks                 0.0014       0.017         0.353         0.369            +0.016
+24   artifact_passes                      0.0005       0.023         0.359         0.374            +0.015
+
+====================================================================================================
+SUMMARY: TOP 5 MOST SIGNIFICANT PARAMETERS PER TARGET (by RF importance)
+====================================================================================================
+
+display_rate:
+  cons_wait_s                  importance=0.4268  r=+0.381  (higher cons_wait_s -> higher display_rate)
+  single_win_max               importance=0.3794  r=-0.555  (higher single_win_max -> lower display_rate)
+  single_win_min               importance=0.1417  r=-0.510  (higher single_win_min -> lower display_rate)
+  spike_detect_mult            importance=0.0136  r=+0.110  (non-monotonic / weak linear signal despite RF importance)
+  pitch_hop_frac               importance=0.0110  r=+0.110  (non-monotonic / weak linear signal despite RF importance)
+
+half_rate:
+  artifact_baseline_pctl       importance=0.2680  r=-0.263  (higher artifact_baseline_pctl -> lower half_rate)
+  cons_wait_s                  importance=0.1915  r=+0.293  (higher cons_wait_s -> higher half_rate)
+  single_win_min               importance=0.1720  r=-0.357  (higher single_win_min -> lower half_rate)
+  single_win_max               importance=0.0980  r=-0.327  (higher single_win_max -> lower half_rate)
+  teal_push_half_width         importance=0.0699  r=-0.140  (non-monotonic / weak linear signal despite RF importance)
+
+double_rate:
+  artifact_baseline_pctl       importance=0.3519  r=-0.260  (higher artifact_baseline_pctl -> lower double_rate)
+  teal_push_half_width         importance=0.1334  r=+0.233  (higher teal_push_half_width -> higher double_rate)
+  artifact_detect_mult         importance=0.1204  r=-0.256  (higher artifact_detect_mult -> lower double_rate)
+  robust_trim_frac             importance=0.0452  r=+0.134  (non-monotonic / weak linear signal despite RF importance)
+  cons_wait_s                  importance=0.0350  r=+0.151  (higher cons_wait_s -> higher double_rate)
+
+correct_rate:
+  cons_wait_s                  importance=0.3877  r=+0.376  (higher cons_wait_s -> higher correct_rate)
+  single_win_max               importance=0.3385  r=-0.508  (higher single_win_max -> lower correct_rate)
+  single_win_min               importance=0.1210  r=-0.479  (higher single_win_min -> lower correct_rate)
+  artifact_baseline_pctl       importance=0.0682  r=+0.299  (higher artifact_baseline_pctl -> higher correct_rate)
+  pitch_hop_frac               importance=0.0153  r=+0.121  (non-monotonic / weak linear signal despite RF importance)
+
+====================================================================================================
+SUMMARY: LEAST SIGNIFICANT PARAMETERS (bottom 5 by average RF importance across all 4 targets)
+====================================================================================================
+
+  artifact_passes              avg_importance=0.0021  (display r=+0.017, half r=-0.032, double r=+0.018, correct r=+0.023)
+  onset_debounce_ticks         avg_importance=0.0045  (display r=-0.002, half r=-0.004, double r=-0.053, correct r=+0.017)
+  pitch_frame_ms               avg_importance=0.0049  (display r=+0.043, half r=+0.019, double r=+0.004, correct r=+0.049)
+  transient_limit_mult         avg_importance=0.0053  (display r=+0.013, half r=+0.050, double r=+0.088, correct r=-0.030)
+  tilt_split_hz                avg_importance=0.0059  (display r=+0.022, half r=+0.059, double r=-0.002, correct r=+0.024)

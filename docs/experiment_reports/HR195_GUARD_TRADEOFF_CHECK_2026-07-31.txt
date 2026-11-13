@@ -1,0 +1,8 @@
+HR195/SYNTHETIC GUARD TRADEOFF CHECK -- 2026-07-31 (60s wall)
+combo 255 DSP + tent/trailing_n/agreement fixed, only teal_jump_confirm_ticks/teal_bpm_delay_slope varied, full 96-file synthetic corpus (17s files)
+
+combo255_shipped: n=6528  correct=2034 (31.2%)  half=1227 double=0 third=9 triple=0 other=134  no_display=3124 (47.9%)  first_display=5.91s avg (n=48 files, never_displayed=48 [50.0%])  badness=(420.0, 3124)
+looser_half: n=6528  correct=2034 (31.2%)  half=1226 double=0 third=9 triple=1 other=134  no_display=3124 (47.9%)  first_display=5.91s avg (n=48 files, never_displayed=48 [50.0%])  badness=(418.0, 3124)
+loosest: n=6528  correct=2036 (31.2%)  half=1243 double=0 third=9 triple=16 other=152  no_display=3072 (47.1%)  first_display=5.99s avg (n=49 files, never_displayed=47 [49.0%])  badness=(450.0, 3072)
+tighter_1.5x: n=6528  correct=2031 (31.1%)  half=1230 double=0 third=9 triple=0 other=130  no_display=3128 (47.9%)  first_display=6.06s avg (n=48 files, never_displayed=48 [50.0%])  badness=(429.0, 3128)
+tightest_2x: n=6528  correct=2031 (31.1%)  half=1234 double=0 third=9 triple=0 other=121  no_display=3133 (48.0%)  first_display=6.14s avg (n=48 files, never_displayed=48 [50.0%])  badness=(437.0, 3133)

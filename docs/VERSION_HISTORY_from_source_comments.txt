@@ -1,0 +1,198 @@
+Verbatim from the top of reference_c/v0.16_current/combo13_stream_internal.h (through the COMBO13_VERSION line).
+Written by the algorithm author at the time of each change; not re-edited.
+
+/* combo13_stream_internal.h -- struct layout for the RAM-reduced streaming front-end variants.
+ *
+ * REPLACES the whole-8-second-window batch design (remove_transients/declick_mult/
+ * detect_spike_runs operating on a persistent 32000-sample raw buffer, ~672KB/88% of
+ * combo13_opt's RAM) with a genuinely streaming front-end: a compact EMA-based percentile
+ * estimator updated per small chunk, plus local (not whole-window) detect/extend/interpolate.
+ * See COMBO13_OPTIMIZATIONS.md's RAM-reduction section for the full design rationale and the
+ * 3-variant comparison this exists to run.
+ *
+ * Also consolidates the two parallel decimated chains (with/without artifact-removal) into ONE
+ * -- onset detection and the r_adaptive preview now read from the SAME artifact-removed signal
+ * as the main estimate, per Daniel's explicit choice (2026-08-04).
+ *
+ * RAM design (SUPERSEDED 2026-08-05, RAM/clock pass 4 -- see band_filt_z/band_env_ring below):
+ * originally, the persistent decimated history (`dec_hist`) was a RING buffer, and every
+ * downstream consumer that needed a contiguous window (feature extraction, broad_env) gathered
+ * FRESH from the ring into ONE shared scratch buffer (`scratch_work`) each time, filtering/
+ * enveloping IN PLACE within it every tick. Pass 4 replaced both: a persistent per-band filter/
+ * envelope runs ONCE per new decimated sample as it arrives (not re-run from scratch per tick per
+ * consumer), caching its output directly at frame rate -- `dec_hist` itself became unnecessary
+ * once nothing needed the raw decimated rate anymore, so it's gone too, along with `scratch_work`.
+ *
+
+ * STREAM_VARIANT must be defined at compile time:
+ *   1 = detect artifacts/spikes at NATIVE rate (4kHz), decimate to 500Hz afterward
+ *   2 = decimate to 500Hz FIRST, detect at 500Hz
+ *   3 = decimate to ~666.7Hz (stride 6) FIRST, detect at that rate
+ */
+#ifndef COMBO13_STREAM_INTERNAL_H
+#define COMBO13_STREAM_INTERNAL_H
+
+/* Revision number for this algorithm + its matching pcg_visualizer deployment (2026-08-08).
+ * Bump this whenever combo13_stream.c/this file's algorithm behavior or memory footprint changes
+ * -- see c13stream_version() in combo13_stream.c and project memory (project_pcg_embedded_c) for
+ * what each revision corresponds to. Retires "plan of record" as this project's informal label
+ * for "the current state" going forward.
+ * 0.1 -> 0.2 (2026-08-08, same day): AGREEMENT_SIGNAL_FLUX promoted to default -- see that macro's
+ * own comment in combo13_stream.c for the full corpus numbers behind the promotion.
+ * 0.2 -> 0.3 (2026-08-08, same day): FLUX_RECTIFY_MODE promoted to full-wave -- see that macro's
+ * own comment in combo13_stream.c for the full corpus numbers + real-recording fix behind it.
+ * 0.3 -> 0.4 (2026-08-08, same day): tilt (the native-rate/FFT pitch-tilt trace this project
+ * inherited unchanged from combo13_opt) removed entirely -- struct fields, FFT subsystem,
+ * constants, and both wasm debug getters -- after direct grep confirmed its result was consumed
+ * nowhere in the shipped build (dead since the 0.2 AGREEMENT_SIGNAL_FLUX promotion). Pure dead-code
+ * elimination: full 314-file corpus and both real recordings (daniel_recovery_test.f32/
+ * daniel_offchest_test.f32, tick-by-tick) are IDENTICAL to 0.3's own numbers.
+ * STATE_SIZE_BYTES 17,052 -> 11,076 (-5,976B, -35.0%) -- see project memory
+ * (project_pcg_embedded_c) for the full removal writeup.
+ * 0.4 -> 0.5 (2026-08-08, same day): re-swept EARLY_RELEASE_MIN_TICKS/MAX_SAVE_S (2/5.0 -> 1/6.0,
+ * tuned entirely around tilt before flux existed) and AGREE_BONUS (2.70 -> 6.5, never independently
+ * validated for flux at all) -- both promoted together after full 314-file corpus + both real
+ * recordings confirmed a simultaneous win on accuracy/octave-errors/no-display-rate/
+ * time-to-first-display, with only a small "other" cost. See EARLY_RELEASE's and AGREE_BONUS's own
+ * comments in combo13_stream.c, and project memory (project_pcg_embedded_c), for full numbers.
+ * 0.5 -> 0.6 (2026-08-08, same day): another optimization run's second phase, the TENT shape and
+ * flatline detector. TENT_PEAK_BPM/PEAK_H/LO_H/HI_H swept and found already near-optimal -- a promising
+ * 60-file signal did NOT survive full-corpus scale, NOT PROMOTED. PEAK_MEAN_DIFF_THRESH (0.003 ->
+ * 0.002) + PEAK_MEAN_TOP_PCT (0.10 -> 0.05) promoted together after finding they were genuinely
+ * miscalibrated for this design -- full corpus correct +918/no_display -950/octave flat, with
+ * byte-identical output to the pre-sweep build on both real recordings (a more aggressive pairing
+ * was found and rejected first, after it introduced a narrow interaction effect that delayed
+ * self-correction out of a pre-existing spurious lock by 1.5s on one real recording).
+ * PEAK_MEAN_SUSTAIN_S was swept too and showed a genuine, uncapped corpus-accuracy-vs-real-
+ * device-off-detection-speed tradeoff -- presented to Daniel directly rather than auto-promoted;
+ * his call was to leave it unchanged at 1.0s. See combo13_stream.c's own comments and project
+ * memory (project_pcg_embedded_c) for full sweep numbers. */
+/* 0.7->0.8 (2026-08-09): bundles this round's "try all three" investigation -- ROBUST_TRIM_FRAC
+ * re-swept and promoted 0.012->0.015 (variant 4), LAG_POW re-swept and rejected (see its own
+ * comment in combo13_stream.c), ratio-aware jump confirmation prototyped and rejected (inert by
+ * default), cross-signal harmonic-ratio check investigated and rejected on full-corpus evidence
+ * (see teal_size_factor()'s own comment in combo13_stream.c). No new mechanisms shipped active by
+ * default beyond ROBUST_TRIM_FRAC's promotion. */
+/* 0.8->0.9 (2026-08-09): first-reading-accuracy optimization, per Daniel's "optimize for the
+ * accuracy of the first displayed reading" then "adapting some of these constants at the beginning
+ * of a file and after a flatline or spike... best of both worlds." Promoted RAMP_DELAY_EXTRA_TICKS_
+ * FIRST 4.0->6.0 (applies only to a session's true first-ever reading, via the pre-existing
+ * st->ever_displayed flag -- every later flatline/spike reconnect keeps the original fast timing
+ * untouched). Full corpus: first-reading correct 287/314->293/314 (91.4%->93.3%), correct(all
+ * ticks) 16082->15495, octave_errors 114->88 (better), no_display 8954->9663. A deliberate value
+ * tradeoff, not a clean win -- see combo13_stream.c's own comment and project memory for the full
+ * Pareto frontier this was chosen from. */
+/* 0.9 SAME-DAY ADDENDUM (2026-08-09, source-tree sync only, no revision bump), per Daniel's
+ * follow-up "how much would it take to actually delay/prevent daniel_recovery_test.f32's own
+ * 160bpm bad first reading" then "push slope to 0.03 and put it into V0.9." Promoted
+ * TEAL_BPM_DELAY_SLOPE_FIRST 0.00239->0.03 (same !ever_displayed-only scoping) -- fixes that exact
+ * real-recording case (first reading 160bpm->53.9bpm, correct) for a further first-reading correct
+ * 293/314->294/314 on top of the tradeoff above. See combo13_stream.c's own comment for the full
+ * threshold-finding and Pareto numbers. */
+/* 0.10 (2026-08-09, same day): TEMPLATE_WEIGHT_ENABLE promoted into the shipped build (LO=0.1/
+ * HI=2.0), per Daniel's "investigate the morphology of the autocorrelation... library of known
+ * morphologies... try implementing this in C" -> "soften to a weight, not a veto." A real behavior
+ * change (correct+23/other-19 on the full 314-file corpus, zero no_display cost), hence the bump
+ * per this project's own versioning convention -- see project memory (project_pcg_embedded_c) for
+ * the full sweep, the rejected TEMPLATE_MATCH_ENABLE hard-veto attempt that preceded it, and the
+ * bucket-boundary bug found and fixed along the way.
+ * CORRECTED (2026-08-09, same day): minor versions keep incrementing past single digits (0.9 ->
+ * 0.10 -> 0.11...), they do NOT roll over to 1.0 -- Daniel's explicit correction. This retires the
+ * plain-`atof()`-as-float WASM version encoding below, since "0.10" and "0.1" atof to the identical
+ * float value (0.1) -- exactly the ambiguity the original 2026-08-08 comment on
+ * combo13_wasm_version() flagged as a future revisit ("e.g. 1.12"). See that function's own updated
+ * comment in combo13_stream.c for the new major*1000+minor encoding.
+ * 0.10 -> 0.11 (2026-08-10): TEMPLATE_MATCH_GATED_V2_ENABLE promoted into the shipped build, per
+ * Daniel's "push it to the visualizer as v0.11" after corpus-validating the mechanism (see that
+ * macro's own comment in combo13_stream.c). Replaces ONLY win_teal's raw-candidate selection (top-6
+ * region-weighted-both-curve-scored peaks instead of the plain tallest-detrended-peak) -- every
+ * downstream mechanism (settling freeze, harmonic veto, jump-confirm, bpm-delay, weighted-median
+ * combine) is untouched. Full 314-file corpus, DISPLAYED bpm: correct 59.07%->59.67%, half 65->0
+ * (eliminated), third 19->0 (eliminated), other 816->810, no_display 9776->9708 -- every axis
+ * improved simultaneously. Ships WITHOUT the tent-shaped selection bias an earlier attempt tried
+ * (that attempt REGRESSED to 57.74% correct -- v0.10 already applies the same tent once, downstream,
+ * in the combine stage, and applying it twice over-pulled high-bpm 'doubled' files toward their own
+ * 1/3-subharmonic; kept as the opt-in, off-by-default TEMPLATE_MATCH_GATED_V2_TENT_ENABLE for
+ * reference). Zero RAM cost beyond TEMPLATE_WEIGHT_ENABLE's own existing footprint
+ * (STATE_SIZE_BYTES unchanged at 11,204). See project memory (project_pcg_embedded_c) for the full
+ * regression-then-fix story. */
+/* 0.12 (2026-08-10): RAM/CLOCK PASS, per Daniel's "everything is tight on my MCU... reduce clock
+ * cycles, RAM and flash" + "any other clock cycle optimizations?" -- five changes, all corpus-
+ * validated byte-identical DISPLAYED-bpm classification (314/314 files unchanged) against 0.11.
+ * CORRECTION (2026-08-10, same day, caught during the pcg_visualizer redeploy): "byte-identical"
+ * above is true at the classification level (correct/half/double/third/other/no_display bucket)
+ * but NOT literally true at the exact-bpm-value level -- a finer-grained 410-file scatter check
+ * found int8 template quantization (#1 below) occasionally flips a near-tied TEMPLATE_MATCH_GATED_V2
+ * candidate-selection or harmonic-veto decision from ~0.8%-of-full-scale quantization noise: 2/410
+ * files show a single-tick shift of <1bpm (one case includes a harmonic_confirmed True->False flip,
+ * not just display rounding), root-caused to change #1 alone via the intermediate quant8-only build
+ * (topN/Gaussian-LUT/lag_pow_recip/geometric-expf changes #2-5 are not implicated). Neither affected
+ * tick changes its correct/incorrect classification -- same class of already-accepted float-precision
+ * tie-sensitivity as this algorithm's documented float32-vs-float64 lroundf/lag-bin edge cases, not a
+ * new failure mode. Five changes below, all corpus-validated at the classification level:
+ *   1. kTemplateCurve/kTemplateCurveDetrended quantized float32->int8 (flash 22,272B->5,568B, 4x).
+ *   2. find_topN_peaks() rewritten to a single-pass running top-N insertion (was: collect every
+ *      local max into a 96-int/384B stack array, then O(n^2) selection-sort the whole thing).
+ *   3. build_region_weights()'s up-to-2,880 expf()/tick replaced with a shared 201-entry Gaussian
+ *      lookup table (kGaussLUT, linear-interpolated).
+ *   4. powf((float)l, LAG_POW) -- recomputed from scratch across all S_LEN lags at 3 call sites
+ *      every tick, despite being a pure function of compile-time constants -- replaced with
+ *      st->lag_pow_recip[S_LEN], computed once in c13stream_init(). STATE_SIZE_BYTES grows
+ *      11,204->11,588 (+384B) as a result -- the only RAM cost in this whole pass.
+ *   5. The adaptive-tau decay window's per-sample expf() (3 bands/tick, up to FEAT_MAX_V calls
+ *      each) replaced with 1 expf() + a running multiply by a per-call constant ratio (exact
+ *      geometric sequence, since tau_frames is fixed within one call).
+ * Also investigated and explicitly NOT changed: harmonic veto (re-tested for redundancy now that
+ * both template mechanisms exist -- still earns its keep, converts would-be wrong-bpm-displayed
+ * ticks into blanks rather than correct ones, kept per Daniel's own call); incremental/recursive
+ * autocorrelation (the largest remaining unclaimed cost, ~570K MACs/tick -- confirmed blocked on a
+ * real normalization problem, a prior attempt at a prerequisite fix already regressed the corpus,
+ * not re-attempted without a fresh angle). See project memory (project_pcg_embedded_c) for the
+ * full history. */
+/* 0.13 (2026-08-11): TICK_S 0.25f->0.5f, per Daniel's "test some other ways to reduce clock cycle
+ * and RAM usage... increasing the timing between steps" -- the backend (autocorrelation, template
+ * matching, harmonic veto, combine) now runs half as often per unit wall-time. Every tick-COUNTED
+ * downstream constant rescaled to preserve its real-world duration in seconds -- see combo13_stream.c's
+ * own TICK_S comment and each rescaled constant's inline comment for the exact arithmetic. Full
+ * 314-file corpus, DISPLAYED bpm: correct 59.67%->60.19% (classification-neutral-to-slightly-
+ * better), median first-display-latency shift 0.00s (mean +0.11s). One new minor self-correcting
+ * artifact (3/26,083 ticks, one file, a transient "double" before settling correct) -- disclosed,
+ * not swept under the rug. STATE_SIZE_BYTES unchanged (11,588) -- this is a clock-cycle-only
+ * change, no buffer is sized by tick rate. A separate DEC_STRIDE (further-downsampling) investigation
+ * was explored alongside this one -- see project memory for that story and why it isn't part of
+ * this revision. */
+/* 0.14 (2026-08-11): STREAM_VARIANT==4's own DEC_STRIDE 10->12 (400Hz->333.333Hz decimated rate),
+ * the DEC_STRIDE side of the RAM/clock exploration mentioned in the 0.13 note above, now folded in
+ * WITH template matching ported to the new lag grid (the exploration itself only tested the
+ * no-template architecture, since the baked templates are fixed to the OLD 400Hz grid -- see
+ * autocorr_templates.h/autocorr_templates_detrended.h, both re-baked from the same 314-file corpus
+ * at the new geometry: ac_lo=20, S_LEN=80, ffs=66.667Hz, same 40-200bpm range preserved via
+ * lo_lag=0.3*ffs/hi_lag=1.5*ffs). LO_LAG_V/HI_LAG_V 24/120 -> 20/100, DEC_MAX_V 3200->2672,
+ * EXT_HI_MAX_V 270->227 (see each constant's own #define site below for the exact rescaling
+ * arithmetic), AA/bandpass filter coefficients (combo13_stream.c) independently re-derived via
+ * scipy.signal.butter and re-verified bit-for-bit against the DEC_STRIDE==8/6/10 coefficients
+ * already in this file before being trusted for the new rate (a real bug was found and fixed along
+ * the way -- see gen_filters_fixed.py's own docstring: the exploration's own gen_filters.py
+ * normalized the anti-alias filter's cutoff to the DECIMATED Nyquist, which is dec_hz-independent
+ * and does NOT reproduce the already-shipped DEC_STRIDE==8/6/10 AA coefficients; the AA filter
+ * actually runs at NATIVE rate, so its Wn must be normalized to the NATIVE Nyquist instead -- fixed
+ * before generating the new DEC_STRIDE==12 coefficients, which is a genuine bit-for-bit match to
+ * what the exploration folder ultimately shipped despite the intermediate script bug). See
+ * combo13_stream.c's own filter-coefficient block for the full per-band pole-stability check.
+ * Full 314-file corpus, DISPLAYED bpm, STREAM_VARIANT=4 + TEMPLATE_WEIGHT_ENABLE +
+ * TEMPLATE_MATCH_GATED_V2_ENABLE -- see this file's own change history / project memory for the
+ * exact tally recorded at promotion time. STATE_SIZE_BYTES and the autocorrelation MAC-count
+ * reduction are recorded at promotion time as well -- both buffers scale with S_LEN_V (96->80,
+ * 0.833x) and DEC_MAX_V (3200->2672, 0.835x) respectively. */
+/* 0.15 (2026-10-06): LOWER BPM BOUND 40 -> 30. STREAM_VARIANT==4's lag grid extended on the slow end
+ * only: HI_LAG_V 100 -> 134 (lag = 60*FFS/bpm, FFS=66.667Hz -> 30bpm = 133.3 frames, rounded UP to 134
+ * so the grid covers 30.0bpm; bin 133 = 30.1bpm, last bin 29.85bpm is excluded because the grid is
+ * [LO_LAG, HI_LAG) i.e. last bin = lag 133). LO_LAG_V (200bpm ceiling) unchanged. S_LEN_V 80 -> 113
+ * (the new bins are appended AFTER the old ones, so bins 0..79 still mean lags 20..99 exactly).
+ * EXT_HI_MAX_V 227 -> 303 (harmonic veto's 2.1814x extended-lag ceiling: ceil(2.18138*133)+2 = 293,
+ * +~3% margin, same convention as every prior revision). The baked morphology templates are
+ * UNCHANGED (still 80 bins, lags 20..99, nearest bucket 45bpm) -- template scoring is restricted to
+ * those first 80 bins (TEMPLATE_MATCH_N_CURVE), and peaks slower than the lowest template-backed rate
+ * score as "unscored" -- see combo13_stream.c's combined_template_score(). No template exists for
+ * 30-40bpm because the 314-file corpus contains no ground-truth readings below ~40bpm to bake from. */
+#define COMBO13_VERSION "0.16"  /* 2026-10-12 retune: 34-bucket templates (merged 30-40bpm) from the 3,049-file combined corpus (train split), SLOW_RATIO_MIN 1.5->1.35 */

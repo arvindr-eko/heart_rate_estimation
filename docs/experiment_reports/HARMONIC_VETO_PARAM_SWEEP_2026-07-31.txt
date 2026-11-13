@@ -1,0 +1,37 @@
+HARMONIC VETO PARAMETER SWEEP -- 2026-07-31 (600 combos, 86s wall)
+combo 0 = current live index.html values (hi_ext_mult=2.10, height_frac=0.15, lo_frac=1.95, hi_frac=2.05, teal_jump_confirm_ticks=5, teal_bpm_delay_slope=0.0767)
+
+combo 0 (current live): combo0: n=26083  correct=17723 (67.9%)  half=339 double=9 third=97 triple=26 other=1453  no_display=6412 (24.6%)  first_display=5.04s avg (n=311 files, never_displayed=3 [1.0%])  badness=(-17027.0, 6412)
+    params: {'hi_ext_mult': 2.1, 'height_frac': 0.15, 'lo_frac': 1.95, 'hi_frac': 2.05, 'teal_jump_confirm_ticks': 4, 'teal_bpm_delay_slope': 0.0538}
+
+TOP 15 BY BADNESS:
+  #1 combo 13: combo13: n=26083  correct=18089 (69.4%)  half=298 double=7 third=57 triple=104 other=1704  no_display=5780 (22.2%)  first_display=4.57s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17479.0, 5780)
+       params: {'hi_ext_mult': 2.1813774614710146, 'height_frac': 0.05895565949526575, 'lo_frac': 1.9239938526174543, 'hi_frac': 2.081876428164688, 'teal_jump_confirm_ticks': 3, 'teal_bpm_delay_slope': 0.002388504108629796}
+  #2 combo 379: combo379: n=26083  correct=18025 (69.1%)  half=279 double=19 third=64 triple=83 other=1745  no_display=5814 (22.3%)  first_display=4.60s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17429.0, 5814)
+       params: {'hi_ext_mult': 2.3349870205234695, 'height_frac': 0.13977956089880167, 'lo_frac': 1.847813394000275, 'hi_frac': 2.0919799835352673, 'teal_jump_confirm_ticks': 2, 'teal_bpm_delay_slope': 0.010777261985913871}
+  #3 combo 516: combo516: n=26083  correct=17929 (68.7%)  half=247 double=61 third=58 triple=134 other=1710  no_display=5899 (22.6%)  first_display=4.66s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17313.0, 5899)
+       params: {'hi_ext_mult': 2.8878712837825633, 'height_frac': 0.4351395053784717, 'lo_frac': 1.8329890581906243, 'hi_frac': 2.2419664307922713, 'teal_jump_confirm_ticks': 1, 'teal_bpm_delay_slope': 0.008098423942007127}
+  #4 combo 20: combo20: n=26083  correct=17935 (68.8%)  half=280 double=33 third=60 triple=118 other=1544  no_display=6061 (23.2%)  first_display=4.79s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17309.0, 6061)
+       params: {'hi_ext_mult': 2.803896819660002, 'height_frac': 0.4276932739405448, 'lo_frac': 1.6391535855837447, 'hi_frac': 2.0583748387450305, 'teal_jump_confirm_ticks': 2, 'teal_bpm_delay_slope': 0.019315664874295323}
+  #5 combo 83: combo83: n=26083  correct=17912 (68.7%)  half=275 double=45 third=49 triple=141 other=1891  no_display=5735 (22.0%)  first_display=4.53s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17272.0, 5735)
+       params: {'hi_ext_mult': 2.8393909132983874, 'height_frac': 0.3168989224451543, 'lo_frac': 1.8421316405381911, 'hi_frac': 2.2898492365580654, 'teal_jump_confirm_ticks': 3, 'teal_bpm_delay_slope': 0.003258750218600853}
+  #6 combo 118: combo118: n=26083  correct=17973 (68.9%)  half=307 double=47 third=47 triple=194 other=1502  no_display=5944 (22.8%)  first_display=4.70s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17265.0, 5944)
+       params: {'hi_ext_mult': 2.3219132381795053, 'height_frac': 0.43806343848632956, 'lo_frac': 1.8016279810794456, 'hi_frac': 2.1230346308923886, 'teal_jump_confirm_ticks': 4, 'teal_bpm_delay_slope': 0.006640757880674919}
+  #7 combo 469: combo469: n=26083  correct=17912 (68.7%)  half=288 double=39 third=78 triple=108 other=1803  no_display=5819 (22.3%)  first_display=4.60s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17258.0, 5819)
+       params: {'hi_ext_mult': 2.7977919156623874, 'height_frac': 0.2421990123076877, 'lo_frac': 1.8084903447907201, 'hi_frac': 2.29858721875081, 'teal_jump_confirm_ticks': 1, 'teal_bpm_delay_slope': 0.021812610590747007}
+  #8 combo 310: combo310: n=26083  correct=17878 (68.5%)  half=262 double=50 third=68 triple=145 other=1999  no_display=5639 (21.6%)  first_display=4.46s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17254.0, 5639)
+       params: {'hi_ext_mult': 2.8346430042770567, 'height_frac': 0.2991191511553746, 'lo_frac': 1.5415821057324537, 'hi_frac': 2.4730587840873377, 'teal_jump_confirm_ticks': 1, 'teal_bpm_delay_slope': 0.002050545486934513}
+  #9 combo 460: combo460: n=26083  correct=17910 (68.7%)  half=273 double=65 third=65 triple=124 other=1906  no_display=5709 (21.9%)  first_display=4.51s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17234.0, 5709)
+       params: {'hi_ext_mult': 2.881749694523078, 'height_frac': 0.2152886927864349, 'lo_frac': 1.8492745601738751, 'hi_frac': 2.4344934660989646, 'teal_jump_confirm_ticks': 2, 'teal_bpm_delay_slope': 0.012456607085770538}
+  #10 combo 199: combo199: n=26083  correct=17869 (68.5%)  half=297 double=23 third=39 triple=149 other=1951  no_display=5712 (21.9%)  first_display=4.51s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17229.0, 5712)
+       params: {'hi_ext_mult': 2.8739451216605016, 'height_frac': 0.2746768102134976, 'lo_frac': 1.9041251264851795, 'hi_frac': 2.476606195000865, 'teal_jump_confirm_ticks': 4, 'teal_bpm_delay_slope': 0.0058726117573729255}
+  #11 combo 380: combo380: n=26083  correct=17911 (68.7%)  half=300 double=43 third=54 triple=131 other=1911  no_display=5698 (21.8%)  first_display=4.50s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17225.0, 5698)
+       params: {'hi_ext_mult': 2.4267382309008836, 'height_frac': 0.27373047046977866, 'lo_frac': 1.738070414498933, 'hi_frac': 2.2824779399612534, 'teal_jump_confirm_ticks': 3, 'teal_bpm_delay_slope': 0.00089779402471033}
+  #12 combo 368: combo368: n=26083  correct=17875 (68.5%)  half=303 double=25 third=43 triple=147 other=1915  no_display=5737 (22.0%)  first_display=4.53s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17219.0, 5737)
+       params: {'hi_ext_mult': 2.734493389637435, 'height_frac': 0.20268684792701688, 'lo_frac': 1.8895090352160853, 'hi_frac': 2.3111827169322465, 'teal_jump_confirm_ticks': 4, 'teal_bpm_delay_slope': 0.01367259748786892}
+  #13 combo 155: combo155: n=26083  correct=17908 (68.7%)  half=282 double=63 third=42 triple=141 other=1832  no_display=5786 (22.2%)  first_display=4.57s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17218.0, 5786)
+       params: {'hi_ext_mult': 2.7730847269271646, 'height_frac': 0.3944389969631449, 'lo_frac': 1.5871786189945385, 'hi_frac': 2.2771513226112408, 'teal_jump_confirm_ticks': 3, 'teal_bpm_delay_slope': 0.002409268787682023}
+  #14 combo 242: combo242: n=26083  correct=17844 (68.4%)  half=281 double=35 third=73 triple=98 other=1896  no_display=5813 (22.3%)  first_display=4.60s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17212.0, 5813)
+       params: {'hi_ext_mult': 2.7934225978408875, 'height_frac': 0.3327485714251849, 'lo_frac': 1.9385985992535473, 'hi_frac': 2.500923705066087, 'teal_jump_confirm_ticks': 1, 'teal_bpm_delay_slope': 0.014950600863501706}
+  #15 combo 597: combo597: n=26083  correct=17883 (68.6%)  half=281 double=55 third=68 triple=140 other=1875  no_display=5740 (22.0%)  first_display=4.54s avg (n=312 files, never_displayed=2 [0.6%])  badness=(-17211.0, 5740)
+       params: {'hi_ext_mult': 2.7357980660439867, 'height_frac': 0.210947780617291, 'lo_frac': 1.8985293331647577, 'hi_frac': 2.4326769475716445, 'teal_jump_confirm_ticks': 2, 'teal_bpm_delay_slope': 0.018280823928247647}

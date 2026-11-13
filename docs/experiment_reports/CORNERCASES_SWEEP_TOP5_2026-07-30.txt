@@ -1,0 +1,273 @@
+CORNERCASES TOP-5 + AGREEMENT/COMPRESSOR SWEEP -- 2026-07-30
+800 combos, baseline=combo 292 for all other 29 params, 6179s
+
+=== combo 96: mean_score=0.353  agreement=flux  compressor=True ===
+  top5={'cons_wait_s': 7.966595940785958, 'single_win_min': 3.6662591065625656, 'single_win_max': 5.801542733710495, 'teal_push_half_width': 22, 'spike_detect_mult': 22.75389179886022}
+  160bpm-1.wav: correct=0%  bad_octave=18%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=10%  first_correct=never
+  60bpm-1.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=68%  bad_octave=0%  first_correct=13.5s
+  90bpm-2.wav: correct=29%  bad_octave=2%  first_correct=30.8s
+
+=== combo 392: mean_score=0.337  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 7.821050024833676, 'single_win_min': 2.0955108374501283, 'single_win_max': 4.527880823719231, 'teal_push_half_width': 22, 'spike_detect_mult': 29.3344901333835}
+  160bpm-1.wav: correct=0%  bad_octave=7%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=19%  first_correct=never
+  60bpm-1.wav: correct=80%  bad_octave=0%  first_correct=9.0s
+  60bpm-2.wav: correct=80%  bad_octave=0%  first_correct=9.0s
+  90bpm-1.wav: correct=67%  bad_octave=6%  first_correct=14.0s
+  90bpm-2.wav: correct=33%  bad_octave=0%  first_correct=30.2s
+
+=== combo 0: mean_score=0.336  agreement=tilt  compressor=False ===
+  top5={'cons_wait_s': 6.763213077509038, 'single_win_min': 2.2003744801623957, 'single_win_max': 5.430381765703482, 'teal_push_half_width': 24, 'spike_detect_mult': 24.922942283559696}
+  160bpm-1.wav: correct=0%  bad_octave=18%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=16%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.5s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.0s
+  90bpm-1.wav: correct=65%  bad_octave=0%  first_correct=14.0s
+  90bpm-2.wav: correct=35%  bad_octave=0%  first_correct=29.5s
+
+=== combo 181: mean_score=0.327  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 6.787381217387483, 'single_win_min': 2.1396572596864156, 'single_win_max': 7.1325751114766405, 'teal_push_half_width': 43, 'spike_detect_mult': 10.533694854675932}
+  160bpm-1.wav: correct=0%  bad_octave=7%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=16%  first_correct=never
+  60bpm-1.wav: correct=65%  bad_octave=0%  first_correct=16.0s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.0s
+  90bpm-1.wav: correct=63%  bad_octave=1%  first_correct=16.2s
+  90bpm-2.wav: correct=28%  bad_octave=2%  first_correct=32.0s
+
+=== combo 121: mean_score=0.297  agreement=flux  compressor=True ===
+  top5={'cons_wait_s': 7.981770371456683, 'single_win_min': 3.285035325598419, 'single_win_max': 10.15274784406331, 'teal_push_half_width': 12, 'spike_detect_mult': 7.054496984354714}
+  160bpm-1.wav: correct=0%  bad_octave=3%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=4%  first_correct=never
+  60bpm-1.wav: correct=28%  bad_octave=0%  first_correct=11.0s
+  60bpm-2.wav: correct=60%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=59%  bad_octave=0%  first_correct=11.5s
+  90bpm-2.wav: correct=19%  bad_octave=1%  first_correct=36.5s
+
+=== combo 41: mean_score=0.284  agreement=tilt  compressor=True ===
+  top5={'cons_wait_s': 6.808797751592268, 'single_win_min': 2.0531619606129814, 'single_win_max': 5.125703835800232, 'teal_push_half_width': 23, 'spike_detect_mult': 22.438216186433007}
+  160bpm-1.wav: correct=0%  bad_octave=18%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=15%  first_correct=never
+  60bpm-1.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=41%  bad_octave=3%  first_correct=14.0s
+  90bpm-2.wav: correct=33%  bad_octave=0%  first_correct=30.2s
+
+=== combo 455: mean_score=0.274  agreement=tilt  compressor=True ===
+  top5={'cons_wait_s': 7.596347682776271, 'single_win_min': 2.3627466914216897, 'single_win_max': 7.5309602291758075, 'teal_push_half_width': 23, 'spike_detect_mult': 28.02533283259946}
+  160bpm-1.wav: correct=0%  bad_octave=18%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=13%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.5s
+  60bpm-2.wav: correct=81%  bad_octave=0%  first_correct=8.5s
+  90bpm-1.wav: correct=65%  bad_octave=9%  first_correct=11.5s
+  90bpm-2.wav: correct=29%  bad_octave=4%  first_correct=32.0s
+
+=== combo 183: mean_score=0.265  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 7.91532593371001, 'single_win_min': 3.1872519112977846, 'single_win_max': 5.323651694228853, 'teal_push_half_width': 17, 'spike_detect_mult': 39.59088476305638}
+  160bpm-1.wav: correct=0%  bad_octave=18%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=22%  first_correct=never
+  60bpm-1.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=67%  bad_octave=3%  first_correct=12.2s
+  90bpm-2.wav: correct=34%  bad_octave=6%  first_correct=30.0s
+
+=== combo 100: mean_score=0.261  agreement=tilt  compressor=False ===
+  top5={'cons_wait_s': 4.746553854402159, 'single_win_min': 5.2384366160780775, 'single_win_max': 8.56458400458937, 'teal_push_half_width': 49, 'spike_detect_mult': 7.399679345904256}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=33%  bad_octave=0%  first_correct=13.0s
+  60bpm-2.wav: correct=33%  bad_octave=0%  first_correct=16.2s
+  90bpm-1.wav: correct=27%  bad_octave=0%  first_correct=13.5s
+  90bpm-2.wav: correct=28%  bad_octave=0%  first_correct=31.5s
+
+=== combo 171: mean_score=0.256  agreement=tilt  compressor=False ===
+  top5={'cons_wait_s': 7.972296543385849, 'single_win_min': 2.934882622108704, 'single_win_max': 6.62914579426885, 'teal_push_half_width': 21, 'spike_detect_mult': 34.199170602056114}
+  160bpm-1.wav: correct=0%  bad_octave=18%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=28%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.5s
+  60bpm-2.wav: correct=81%  bad_octave=0%  first_correct=8.5s
+  90bpm-1.wav: correct=71%  bad_octave=2%  first_correct=13.0s
+  90bpm-2.wav: correct=33%  bad_octave=3%  first_correct=30.2s
+
+=== combo 495: mean_score=0.254  agreement=flux  compressor=True ===
+  top5={'cons_wait_s': 1.2222951691928352, 'single_win_min': 3.377254930490507, 'single_win_max': 6.631796721638331, 'teal_push_half_width': 25, 'spike_detect_mult': 27.037034164952484}
+  160bpm-1.wav: correct=0%  bad_octave=31%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=16%  first_correct=never
+  60bpm-1.wav: correct=75%  bad_octave=0%  first_correct=11.2s
+  60bpm-2.wav: correct=85%  bad_octave=0%  first_correct=6.8s
+  90bpm-1.wav: correct=67%  bad_octave=0%  first_correct=15.0s
+  90bpm-2.wav: correct=28%  bad_octave=0%  first_correct=31.2s
+
+=== combo 403: mean_score=0.247  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 6.766922992237623, 'single_win_min': 2.412426229790319, 'single_win_max': 4.718669638786998, 'teal_push_half_width': 45, 'spike_detect_mult': 27.1415612680996}
+  160bpm-1.wav: correct=0%  bad_octave=1%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=32%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  60bpm-2.wav: correct=83%  bad_octave=0%  first_correct=7.8s
+  90bpm-1.wav: correct=64%  bad_octave=7%  first_correct=12.8s
+  90bpm-2.wav: correct=29%  bad_octave=8%  first_correct=32.2s
+
+=== combo 314: mean_score=0.235  agreement=tilt  compressor=True ===
+  top5={'cons_wait_s': 7.4819617153035125, 'single_win_min': 2.0379689764816598, 'single_win_max': 5.035639275326286, 'teal_push_half_width': 16, 'spike_detect_mult': 16.497025588279165}
+  160bpm-1.wav: correct=0%  bad_octave=16%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=24%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  60bpm-2.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  90bpm-1.wav: correct=38%  bad_octave=0%  first_correct=14.8s
+  90bpm-2.wav: correct=30%  bad_octave=3%  first_correct=31.0s
+
+=== combo 598: mean_score=0.233  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 7.50350936601326, 'single_win_min': 2.084671987294139, 'single_win_max': 7.81260265346518, 'teal_push_half_width': 24, 'spike_detect_mult': 38.9375029790111}
+  160bpm-1.wav: correct=0%  bad_octave=9%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=21%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  60bpm-2.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  90bpm-1.wav: correct=60%  bad_octave=17%  first_correct=15.2s
+  90bpm-2.wav: correct=27%  bad_octave=3%  first_correct=32.0s
+
+=== combo 14: mean_score=0.230  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 7.841429868065536, 'single_win_min': 2.9264475964548873, 'single_win_max': 10.537421599927736, 'teal_push_half_width': 29, 'spike_detect_mult': 26.267570444795055}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=38%  bad_octave=0%  first_correct=8.2s
+  60bpm-2.wav: correct=38%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=28%  bad_octave=0%  first_correct=12.8s
+  90bpm-2.wav: correct=3%  bad_octave=5%  first_correct=10.2s
+
+=== combo 42: mean_score=0.227  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 7.363261038083518, 'single_win_min': 3.850195826383208, 'single_win_max': 6.016475161865564, 'teal_push_half_width': 40, 'spike_detect_mult': 28.68121577106686}
+  160bpm-1.wav: correct=0%  bad_octave=28%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=22%  first_correct=never
+  60bpm-1.wav: correct=78%  bad_octave=0%  first_correct=10.0s
+  60bpm-2.wav: correct=80%  bad_octave=0%  first_correct=9.2s
+  90bpm-1.wav: correct=65%  bad_octave=2%  first_correct=15.0s
+  90bpm-2.wav: correct=33%  bad_octave=3%  first_correct=8.8s
+
+=== combo 270: mean_score=0.215  agreement=tilt  compressor=True ===
+  top5={'cons_wait_s': 7.711197379179703, 'single_win_min': 2.202425152937186, 'single_win_max': 8.137446052130388, 'teal_push_half_width': 53, 'spike_detect_mult': 15.438953252960502}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=38%  bad_octave=0%  first_correct=9.0s
+  60bpm-2.wav: correct=60%  bad_octave=0%  first_correct=9.0s
+  90bpm-1.wav: correct=1%  bad_octave=0%  first_correct=25.5s
+  90bpm-2.wav: correct=0%  bad_octave=0%  first_correct=never
+
+=== combo 656: mean_score=0.211  agreement=flux  compressor=True ===
+  top5={'cons_wait_s': 7.998340449756917, 'single_win_min': 2.572701703035416, 'single_win_max': 7.367947268951869, 'teal_push_half_width': 30, 'spike_detect_mult': 35.03876823120868}
+  160bpm-1.wav: correct=0%  bad_octave=12%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=28%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  60bpm-2.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  90bpm-1.wav: correct=65%  bad_octave=12%  first_correct=12.8s
+  90bpm-2.wav: correct=20%  bad_octave=1%  first_correct=34.0s
+
+=== combo 511: mean_score=0.206  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 6.120835771968223, 'single_win_min': 2.083280725837548, 'single_win_max': 4.440972932946929, 'teal_push_half_width': 52, 'spike_detect_mult': 32.486711822955186}
+  160bpm-1.wav: correct=0%  bad_octave=26%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=28%  first_correct=never
+  60bpm-1.wav: correct=80%  bad_octave=0%  first_correct=9.0s
+  60bpm-2.wav: correct=83%  bad_octave=0%  first_correct=7.5s
+  90bpm-1.wav: correct=63%  bad_octave=0%  first_correct=14.0s
+  90bpm-2.wav: correct=25%  bad_octave=1%  first_correct=34.0s
+
+=== combo 491: mean_score=0.204  agreement=tilt  compressor=False ===
+  top5={'cons_wait_s': 3.2407312888438464, 'single_win_min': 5.382163027286159, 'single_win_max': 10.956936356860911, 'teal_push_half_width': 43, 'spike_detect_mult': 9.10677987021329}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=32%  bad_octave=0%  first_correct=11.8s
+  60bpm-2.wav: correct=33%  bad_octave=0%  first_correct=13.8s
+  90bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  90bpm-2.wav: correct=31%  bad_octave=0%  first_correct=30.8s
+
+=== combo 515: mean_score=0.203  agreement=tilt  compressor=False ===
+  top5={'cons_wait_s': 7.925557723166952, 'single_win_min': 2.248271829624338, 'single_win_max': 6.829312992069858, 'teal_push_half_width': 34, 'spike_detect_mult': 38.67324821383229}
+  160bpm-1.wav: correct=0%  bad_octave=18%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=16%  first_correct=never
+  60bpm-1.wav: correct=80%  bad_octave=0%  first_correct=9.0s
+  60bpm-2.wav: correct=80%  bad_octave=0%  first_correct=9.0s
+  90bpm-1.wav: correct=53%  bad_octave=18%  first_correct=13.5s
+  90bpm-2.wav: correct=25%  bad_octave=0%  first_correct=34.0s
+
+=== combo 655: mean_score=0.202  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 4.009632234783108, 'single_win_min': 5.470020075795543, 'single_win_max': 11.530915293358923, 'teal_push_half_width': 25, 'spike_detect_mult': 8.26929725637034}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=33%  bad_octave=0%  first_correct=12.2s
+  60bpm-2.wav: correct=33%  bad_octave=0%  first_correct=15.2s
+  90bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  90bpm-2.wav: correct=30%  bad_octave=0%  first_correct=31.5s
+
+=== combo 398: mean_score=0.196  agreement=tilt  compressor=False ===
+  top5={'cons_wait_s': 4.905190455925203, 'single_win_min': 5.749271785117788, 'single_win_max': 9.24557976937525, 'teal_push_half_width': 33, 'spike_detect_mult': 9.278667282245756}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=32%  bad_octave=0%  first_correct=13.2s
+  60bpm-2.wav: correct=32%  bad_octave=0%  first_correct=15.5s
+  90bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  90bpm-2.wav: correct=29%  bad_octave=0%  first_correct=32.2s
+
+=== combo 191: mean_score=0.193  agreement=flux  compressor=True ===
+  top5={'cons_wait_s': 7.546263850899802, 'single_win_min': 3.036165182605854, 'single_win_max': 9.639801177899141, 'teal_push_half_width': 24, 'spike_detect_mult': 13.967071976286508}
+  160bpm-1.wav: correct=0%  bad_octave=1%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=36%  bad_octave=0%  first_correct=8.5s
+  60bpm-2.wav: correct=59%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  90bpm-2.wav: correct=0%  bad_octave=0%  first_correct=never
+
+=== combo 717: mean_score=0.190  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 7.486036084058488, 'single_win_min': 2.2538276602698946, 'single_win_max': 5.028320406624863, 'teal_push_half_width': 50, 'spike_detect_mult': 20.605865232434287}
+  160bpm-1.wav: correct=0%  bad_octave=24%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=22%  first_correct=never
+  60bpm-1.wav: correct=75%  bad_octave=0%  first_correct=11.5s
+  60bpm-2.wav: correct=81%  bad_octave=0%  first_correct=8.5s
+  90bpm-1.wav: correct=69%  bad_octave=4%  first_correct=12.8s
+  90bpm-2.wav: correct=25%  bad_octave=8%  first_correct=32.0s
+
+=== combo 190: mean_score=0.181  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 4.019647160574999, 'single_win_min': 4.954050103298978, 'single_win_max': 11.76826031345313, 'teal_push_half_width': 29, 'spike_detect_mult': 6.49396352367246}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=34%  bad_octave=0%  first_correct=12.5s
+  60bpm-2.wav: correct=34%  bad_octave=0%  first_correct=15.5s
+  90bpm-1.wav: correct=43%  bad_octave=14%  first_correct=13.5s
+  90bpm-2.wav: correct=7%  bad_octave=0%  first_correct=42.0s
+
+=== combo 647: mean_score=0.180  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 1.8835444191033546, 'single_win_min': 4.715107757037202, 'single_win_max': 11.878218556088374, 'teal_push_half_width': 48, 'spike_detect_mult': 8.620156866914197}
+  160bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=0%  first_correct=never
+  60bpm-1.wav: correct=34%  bad_octave=0%  first_correct=10.5s
+  60bpm-2.wav: correct=0%  bad_octave=0%  first_correct=never
+  90bpm-1.wav: correct=28%  bad_octave=0%  first_correct=25.5s
+  90bpm-2.wav: correct=28%  bad_octave=1%  first_correct=31.5s
+
+=== combo 756: mean_score=0.179  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 7.300658466024853, 'single_win_min': 2.3800145548675786, 'single_win_max': 7.9013010449749395, 'teal_push_half_width': 35, 'spike_detect_mult': 7.774533185583818}
+  160bpm-1.wav: correct=0%  bad_octave=28%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=19%  first_correct=never
+  60bpm-1.wav: correct=64%  bad_octave=0%  first_correct=16.2s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=59%  bad_octave=0%  first_correct=18.8s
+  90bpm-2.wav: correct=23%  bad_octave=4%  first_correct=33.0s
+
+=== combo 626: mean_score=0.178  agreement=flux  compressor=True ===
+  top5={'cons_wait_s': 6.754493858164738, 'single_win_min': 2.4153910737798534, 'single_win_max': 6.714168674231544, 'teal_push_half_width': 49, 'spike_detect_mult': 33.63652094705971}
+  160bpm-1.wav: correct=0%  bad_octave=9%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=13%  first_correct=never
+  60bpm-1.wav: correct=81%  bad_octave=0%  first_correct=8.8s
+  60bpm-2.wav: correct=82%  bad_octave=0%  first_correct=8.2s
+  90bpm-1.wav: correct=70%  bad_octave=0%  first_correct=12.0s
+  90bpm-2.wav: correct=0%  bad_octave=31%  first_correct=never
+
+=== combo 474: mean_score=0.173  agreement=flux  compressor=False ===
+  top5={'cons_wait_s': 6.405806870403472, 'single_win_min': 2.4577473830784777, 'single_win_max': 4.807703830817309, 'teal_push_half_width': 11, 'spike_detect_mult': 17.430594298323616}
+  160bpm-1.wav: correct=0%  bad_octave=22%  first_correct=never
+  180bpm-1.wav: correct=0%  bad_octave=15%  first_correct=never
+  60bpm-1.wav: correct=77%  bad_octave=0%  first_correct=10.2s
+  60bpm-2.wav: correct=84%  bad_octave=0%  first_correct=7.2s
+  90bpm-1.wav: correct=59%  bad_octave=0%  first_correct=14.2s
+  90bpm-2.wav: correct=32%  bad_octave=26%  first_correct=30.8s
+

@@ -1,0 +1,25 @@
+HARMONIC VETO GATED CHECK (gate=bpm<90.0) -- 2026-07-31 (468s wall)
+
+no_veto: n=26083  correct=17464 (67.0%)  half=333 double=19 third=94 triple=152 other=2011  no_display=5950 (22.8%)  first_display=4.64s avg (n=311 files, never_displayed=3 [1.0%])  badness=(-16760.0, 5950)
+full_veto: n=26083  correct=17689 (67.8%)  half=340 double=25 third=93 triple=41 other=1345  no_display=6527 (25.0%)  first_display=5.10s avg (n=311 files, never_displayed=3 [1.0%])  badness=(-16959.0, 6527)
+gated_veto_lt90: n=26083  correct=17555 (67.3%)  half=329 double=62 third=93 triple=193 other=1806  no_display=6026 (23.1%)  first_display=4.69s avg (n=311 files, never_displayed=3 [1.0%])  badness=(-16773.0, 6026)
+
+=== BY BAND ===
+-- no_veto --
+  under60: n=7127  correct=4917 (69.0%)  half=0 double=1 third=0 triple=152 other=881  no_display=1143 (16.0%)  first_display=4.46s avg (n=62 files, never_displayed=0 [0.0%])  badness=(-4915.0, 1143)
+  60-90: n=12066  correct=8375 (69.4%)  half=89 double=18 third=0 triple=0 other=835  no_display=2734 (22.7%)  first_display=4.45s avg (n=153 files, never_displayed=1 [0.6%])  badness=(-8161.0, 2734)
+  90-120: n=2674  correct=1800 (67.3%)  half=52 double=0 third=5 triple=0 other=118  no_display=687 (25.7%)  first_display=4.77s avg (n=36 files, never_displayed=0 [0.0%])  badness=(-1696.0, 687)
+  120-160: n=1768  correct=1117 (63.2%)  half=37 double=0 third=9 triple=0 other=70  no_display=535 (30.3%)  first_display=5.14s avg (n=26 files, never_displayed=0 [0.0%])  badness=(-1043.0, 535)
+  160plus: n=2448  correct=1255 (51.3%)  half=155 double=0 third=80 triple=0 other=107  no_display=851 (34.8%)  first_display=5.26s avg (n=34 files, never_displayed=2 [5.6%])  badness=(-945.0, 851)
+-- full_veto --
+  under60: n=7127  correct=5121 (71.9%)  half=0 double=25 third=0 triple=41 other=489  no_display=1451 (20.4%)  first_display=5.76s avg (n=62 files, never_displayed=0 [0.0%])  badness=(-5071.0, 1451)
+  60-90: n=12066  correct=8484 (70.3%)  half=90 double=0 third=0 triple=0 other=597  no_display=2890 (24.0%)  first_display=4.68s avg (n=153 files, never_displayed=1 [0.6%])  badness=(-8304.0, 2890)
+  90-120: n=2674  correct=1780 (66.6%)  half=62 double=0 third=5 triple=0 other=65  no_display=744 (27.8%)  first_display=5.17s avg (n=36 files, never_displayed=0 [0.0%])  badness=(-1656.0, 744)
+  120-160: n=1768  correct=1060 (60.0%)  half=35 double=0 third=9 triple=0 other=102  no_display=562 (31.8%)  first_display=5.40s avg (n=26 files, never_displayed=0 [0.0%])  badness=(-990.0, 562)
+  160plus: n=2448  correct=1244 (50.8%)  half=153 double=0 third=79 triple=0 other=92  no_display=880 (35.9%)  first_display=5.47s avg (n=34 files, never_displayed=2 [5.6%])  badness=(-938.0, 880)
+-- gated_veto_lt90 --
+  under60: n=7127  correct=5046 (70.8%)  half=0 double=25 third=0 triple=193 other=664  no_display=1197 (16.8%)  first_display=4.66s avg (n=62 files, never_displayed=0 [0.0%])  badness=(-4996.0, 1197)
+  60-90: n=12066  correct=8335 (69.1%)  half=89 double=37 third=0 triple=0 other=844  no_display=2756 (22.8%)  first_display=4.48s avg (n=153 files, never_displayed=1 [0.6%])  badness=(-8083.0, 2756)
+  90-120: n=2674  correct=1800 (67.3%)  half=52 double=0 third=5 triple=0 other=118  no_display=687 (25.7%)  first_display=4.77s avg (n=36 files, never_displayed=0 [0.0%])  badness=(-1696.0, 687)
+  120-160: n=1768  correct=1119 (63.3%)  half=35 double=0 third=9 triple=0 other=70  no_display=535 (30.3%)  first_display=5.14s avg (n=26 files, never_displayed=0 [0.0%])  badness=(-1049.0, 535)
+  160plus: n=2448  correct=1255 (51.3%)  half=153 double=0 third=79 triple=0 other=110  no_display=851 (34.8%)  first_display=5.26s avg (n=34 files, never_displayed=2 [5.6%])  badness=(-949.0, 851)
