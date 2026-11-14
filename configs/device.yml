@@ -12,8 +12,19 @@ readout:                       # when the first reading appears; changing these 
   slow_irregular_after_s: 3.0  # slow or irregular hearts: first reading not before this time
                                # (decision.slow_irregular_early_confidence until
                                # decision.slow_irregular_relaxed_s, then slow_irregular_confidence)
+  slow_irregular_confidence: 0.9  # slow or irregular hearts: how sure before the first reading
+                               # from decision.slow_irregular_relaxed_s (probability of being
+                               # within ±10 BPM); higher: later, more accurate (1.5.0rc2: 0.95)
   latest_s: 8.0                # heart sound present: a first reading at this time when the
                                # estimate is roughly certain (decision.forced_min_mass)
+
+firmware:                      # firmware calls (hr_push_data ... hr_calculate); C only
+  ring_blocks: 12              # input queued between hr_process_chunk calls: 12 x 50 ms = 0.6 s,
+                               # for a processing task woken at least every 0.5 s
+  display_near_bpm: 3          # shown value (hr_calculate): a reading this close shown as is
+  display_jump_bpm: 10         # farther: the shown value moves halfway, by display_near_bpm to
+                               # display_jump_bpm per reading; a reading farther than this only
+                               # once the next one agrees (single outliers never shown)
 
 
 # ── 2. ALGORITHM (fixed by the trained model) ────────────────────────────────────────────────────
@@ -81,7 +92,6 @@ decision:                                  # block F, internal (re-validate when
   min_s: 1.5                               # no reading before this time
   slow_bpm: 50                             # below: slow path
   regular_max_cv: 0.10                     # picked-beat interval CV at or above: irregular path
-  slow_irregular_confidence: 0.95          # slow/irregular path: probability within ±10 BPM
   slow_irregular_early_confidence: 0.97    # slow/irregular path before slow_irregular_relaxed_s:
   slow_irregular_relaxed_s: 4.0            # this probability within ±10 BPM is needed
   conf_fine_bpm: 4.0                       # confidence of a regular reading: mass within ±4 BPM

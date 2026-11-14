@@ -7,7 +7,7 @@
  * concatenated. */
 #include <math.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 static const uint8_t dilation[HR_NET_LAYERS] = HR_NET_DILATIONS;
 static const uint16_t line_offset[HR_NET_LAYERS] = HR_NET_LINE_OFFSETS;

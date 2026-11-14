@@ -1,7 +1,8 @@
 """C constants of the device model, generated from configs/device.yml and the model files.
 
-Writes c/build/generated/hr_model.h (sizes, scalar constants, array declarations) and
-hr_model.c (coefficient and weight arrays) for the C port in c/. Values come from the device
+Writes c/generated/hr_model.h (sizes, scalar constants, array declarations) and hr_model.c
+(coefficient and weight arrays) for the C port in c/; both are committed, so firmware builds the
+port without Python. Values come from the device
 modules' own init and load functions, so the C constants equal the Python reference's: filter
 sections and steady-state step responses (frontend), TCN weights (net), scorer weights (scorer;
 the input standardisation folded into the first layer: w1 / std and b1 - (mean / std) @ w1),
@@ -23,7 +24,7 @@ from training import config
 log = logging.getLogger(__name__)
 
 C_DIR = config.PROJECT_ROOT / "c"
-OUT_DIR = C_DIR / "build" / "generated"
+OUT_DIR = C_DIR / "generated"
 
 
 def c_float(x: float) -> str:
@@ -98,6 +99,11 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_CONFIRM_FRAMES": readout.frames_of(dc["confirm_s"], estimator.frame_seconds(cfg)),
         "HR_IDLE_SAMPLES": estimator.idle_samples(cfg),
         "HR_SLOW_IRREGULAR_RELAXED_BLOCKS": _blocks(cfg, dc["slow_irregular_relaxed_s"]),
+        "HR_RING_BLOCKS": cfg["firmware"]["ring_blocks"],
+        "HR_DISPLAY_NEAR_BPM": cfg["firmware"]["display_near_bpm"],
+        "HR_DISPLAY_JUMP_BPM": cfg["firmware"]["display_jump_bpm"],
+        "HR_DISPLAY_MAX_BPM": readout.DISPLAY_MAX_BPM,
+        "HR_DISPLAY_NONE": f"({readout.DISPLAY_NONE})",
         "HR_PRESENCE_ENABLED": int(presence is not None),
         "HR_PRESENCE_N": len(readout.PRESENCE_FEATURES),
         "HR_PRESENCE_HIDDEN": presence.w1.shape[1] if presence is not None else 0}
@@ -117,7 +123,6 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_PEAK_MIN_REL": cfg["rhythm"]["peak_min_rel"],
         "HR_REFRACTORY_REL": cfg["rhythm"]["refractory_rel"],
         "HR_SLOW_BPM": dc["slow_bpm"], "HR_REGULAR_MAX_CV": dc["regular_max_cv"],
-        "HR_SLOW_IRREGULAR_CONFIDENCE": dc["slow_irregular_confidence"],
         "HR_SLOW_IRREGULAR_EARLY_CONFIDENCE": dc["slow_irregular_early_confidence"],
         "HR_IDLE_ACTIVATION": dc["idle_activation"],
         "HR_CONF_FINE_BPM": dc["conf_fine_bpm"], "HR_CONF_ROUGH_BPM": dc["conf_rough_bpm"],
@@ -126,6 +131,7 @@ def model(cfg: dict) -> tuple[dict, dict]:
         "HR_LOST_PERIODICITY": dc["lost_periodicity"],
         "HR_DEFAULT_CONFIDENCE": rd["confidence"],
         "HR_DEFAULT_SLOW_IRREGULAR_AFTER_S": rd["slow_irregular_after_s"],
+        "HR_DEFAULT_SLOW_IRREGULAR_CONFIDENCE": rd["slow_irregular_confidence"],
         "HR_DEFAULT_LATEST_S": rd["latest_s"],
         "HR_Q_HF_ALPHA": 1.0 / (qc["hf_tau_s"] * env_rate),
         "HR_HF_MAX": qc["hf_max"], "HR_HF_LOST": qc["hf_lost"],

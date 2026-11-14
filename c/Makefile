@@ -8,21 +8,22 @@ CC      ?= cc
 M4_CC   ?= clang
 SIZE    ?= $(shell command -v llvm-size || xcrun -f llvm-size 2>/dev/null)
 NM      ?= $(shell command -v llvm-nm || xcrun -f llvm-nm 2>/dev/null)
+MODEL   := generated
 GEN     := build/generated
 SRC     := src/frontend.c src/quality.c src/net.c src/features.c src/scorer.c src/tracker.c \
-           src/rhythm.c src/readout.c src/estimator.c
+           src/rhythm.c src/readout.c src/estimator.c src/stream.c
 M4_OBJ  := $(addprefix build/m4/,$(notdir $(SRC:.c=.o))) build/m4/hr_model.o
-HDR     := include/hr.h include/hr_blocks.h $(GEN)/hr_model.h
+HDR     := include/hr.h include/hr_blocks.h $(MODEL)/hr_model.h
 SHA256  ?= $(shell command -v sha256sum || echo shasum -a 256)
-VERSION  = $(shell sed -n 's/^\#define HR_VERSION "\(.*\)"/\1/p' $(GEN)/hr_model.h)
-MODEL_ID = $(shell sed -n 's/^\#define HR_MODEL_ID "\(.*\)"/\1/p' $(GEN)/hr_model.h)
+VERSION  = $(shell sed -n 's/^\#define HR_VERSION "\(.*\)"/\1/p' $(MODEL)/hr_model.h)
+MODEL_ID = $(shell sed -n 's/^\#define HR_MODEL_ID "\(.*\)"/\1/p' $(MODEL)/hr_model.h)
 REPO     = $(shell git -C .. remote get-url origin 2>/dev/null | sed 's/\.git$$//')
 DIST     = build/hr_c_$(VERSION)
 WARN    := -std=c99 -Wall -Wextra -Werror -pedantic -Wdouble-promotion
-CFLAGS  := $(WARN) -O2 -ffp-contract=off -Iinclude -I$(GEN)
+CFLAGS  := $(WARN) -O2 -ffp-contract=off -Iinclude -I$(MODEL) -I$(GEN)
 M4FLAGS := --target=thumbv7em-none-eabihf -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard \
            $(WARN) -Os -nostdlibinc -fno-math-errno -ffp-contract=off -fstack-usage \
-           -Iinclude -I$(GEN) -isystem tools/freestanding
+           -Iinclude -I$(MODEL) -I$(GEN) -isystem tools/freestanding
 ifeq ($(shell uname -s),Darwin)
 LIB     := build/libhr_debug.dylib
 SHARED  := -dynamiclib
@@ -38,25 +39,25 @@ all: $(LIB) build/hr_run
 model:
 	cd .. && hr-estimation c-model
 
-$(GEN)/hr_model.h $(GEN)/hr_model.c $(GEN)/hr_selftest_cases.h:
+$(MODEL)/hr_model.h $(MODEL)/hr_model.c $(GEN)/hr_selftest_cases.h:
 	@echo "$@ missing: run 'make model'" && false
 
-$(LIB): $(SRC) $(GEN)/hr_model.c $(HDR)
-	$(CC) $(CFLAGS) -DHR_DEBUG -fPIC $(SHARED) -o $@ $(SRC) $(GEN)/hr_model.c -lm
+$(LIB): $(SRC) $(MODEL)/hr_model.c $(HDR)
+	$(CC) $(CFLAGS) -DHR_DEBUG -fPIC $(SHARED) -o $@ $(SRC) $(MODEL)/hr_model.c -lm
 
-build/hr_run: tools/hr_run.c $(SRC) $(GEN)/hr_model.c $(HDR)
-	$(CC) $(CFLAGS) -o $@ tools/hr_run.c $(SRC) $(GEN)/hr_model.c -lm
+build/hr_run: tools/hr_run.c $(SRC) $(MODEL)/hr_model.c $(HDR)
+	$(CC) $(CFLAGS) -o $@ tools/hr_run.c $(SRC) $(MODEL)/hr_model.c -lm
 
-build/hr_selftest: tools/hr_selftest.c $(SRC) $(GEN)/hr_model.c $(GEN)/hr_selftest_cases.h $(HDR)
-	$(CC) $(CFLAGS) -DHR_SELFTEST_MAIN -o $@ tools/hr_selftest.c $(SRC) $(GEN)/hr_model.c -lm
+build/hr_selftest: tools/hr_selftest.c $(SRC) $(MODEL)/hr_model.c $(GEN)/hr_selftest_cases.h $(HDR)
+	$(CC) $(CFLAGS) -DHR_SELFTEST_MAIN -o $@ tools/hr_selftest.c $(SRC) $(MODEL)/hr_model.c -lm
 
 selftest: build/hr_selftest
 	./build/hr_selftest
 
-m4: $(SRC) $(GEN)/hr_model.c $(HDR) tools/state_size.c
+m4: $(SRC) $(MODEL)/hr_model.c $(HDR) tools/state_size.c
 	@test -n "$(SIZE)" -a -n "$(NM)" || { echo "llvm-size and llvm-nm not found"; false; }
 	mkdir -p build/m4
-	for f in $(SRC) $(GEN)/hr_model.c tools/state_size.c; do \
+	for f in $(SRC) $(MODEL)/hr_model.c tools/state_size.c; do \
 		$(M4_CC) $(M4FLAGS) -c $$f -o build/m4/$$(basename $$f .c).o || exit 1; done
 	mv *.su build/m4/ 2>/dev/null || true
 	$(SIZE) $(M4_OBJ)
@@ -69,7 +70,7 @@ dist: model
 	mkdir -p $(DIST)/include $(DIST)/src $(DIST)/generated $(DIST)/tools
 	cp include/hr.h include/hr_blocks.h $(DIST)/include/
 	cp $(SRC) $(DIST)/src/
-	cp $(GEN)/hr_model.h $(GEN)/hr_model.c $(GEN)/hr_selftest_cases.h $(DIST)/generated/
+	cp $(MODEL)/hr_model.h $(MODEL)/hr_model.c $(GEN)/hr_selftest_cases.h $(DIST)/generated/
 	cp tools/hr_selftest.c tools/hr_run.c $(DIST)/tools/
 	{ echo "# hr_c $(VERSION)"; echo; \
 	  echo "C port of the heart-rate estimator, model $(MODEL_ID), built $$(date -u +%F) from"; \

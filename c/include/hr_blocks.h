@@ -1,10 +1,11 @@
 /* Block states and functions of the estimator, one group per Python module of src/device
- * (internal; included by hr.h so that callers can allocate hr_state_t statically). */
+ * (internal; callers include it only to allocate hr_state_t statically). */
 #ifndef HR_BLOCKS_H
 #define HR_BLOCKS_H
 
 #include <stdint.h>
 
+#include "hr.h"
 #include "hr_model.h"
 
 /* Q signal quality (quality.py): averaged 25-100 Hz and 200-400 Hz band energies. */
@@ -73,7 +74,7 @@ typedef struct {
     int16_t k;
 } hr_peak_cursor_t;
 
-typedef struct {
+struct hr_state {
     hr_frontend_t fe;
     hr_quality_t q;
     hr_net_t nn;
@@ -96,6 +97,16 @@ typedef struct {
                                        (saturated; kept across restarts) */
     uint8_t s1_n;
     uint8_t has_reading;
+    /* firmware calls (stream.c): input ring, written by hr_push_data in the audio context */
+    int16_t ring[HR_RING_BLOCKS][HR_BLOCK_SAMPLES];
+    uint8_t ring_restart[HR_RING_BLOCKS]; /* block follows an input gap: new measurement */
+    volatile uint32_t blocks_written;  /* complete blocks pushed */
+    volatile uint32_t blocks_read;     /* blocks released by hr_update_chunk */
+    uint32_t blocks_done;              /* blocks processed by hr_process_chunk */
+    uint16_t ring_fill;                /* samples in the block being filled */
+    uint8_t gap_pending;               /* input dropped or missing: restart at the next block */
+    int16_t shown_bpm, pending_bpm;    /* display rule: shown value, held far reading (whole
+                                          BPM; HR_DISPLAY_NONE: none) */
     hr_scratch_t scratch;
 #ifdef HR_DEBUG
     float dbg_env[HR_FE_OUT][HR_ENV_PER_BLOCK];
@@ -104,7 +115,7 @@ typedef struct {
     float dbg_log_emission[HR_N_STATES];
     uint8_t dbg_has_features;
 #endif
-} hr_state_t;
+};
 
 /* Q: per envelope sample; the high-band ratio per frame. */
 void hr_quality_init(hr_quality_t *q);

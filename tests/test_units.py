@@ -91,13 +91,28 @@ def test_readout_rules(cfg):
     assert not due(np.full(grid.size, 1 / grid.size), 72, rd["latest_s"])
     # slow/irregular: early confidence until slow_irregular_relaxed_s, then the relaxed one
     a = {"path": "slow_irregular", "rough_mass": 1.0,
-         "p_rough": (dc["slow_irregular_early_confidence"] + dc["slow_irregular_confidence"]) / 2}
+         "p_rough": (dc["slow_irregular_early_confidence"] + rd["slow_irregular_confidence"]) / 2}
     early_t = rd["slow_irregular_after_s"]
     assert early_t < dc["slow_irregular_relaxed_s"]
     assert not readout.first_due(cfg, a, 0.6, 0.2, 40, early_t)
     assert readout.first_due(cfg, {**a, "p_rough": dc["slow_irregular_early_confidence"]}, 0.6,
                              0.2, 40, early_t)
     assert readout.first_due(cfg, a, 0.6, 0.2, 40, dc["slow_irregular_relaxed_s"])
+
+
+def test_display_rule(cfg):
+    """Firmware display: first reading as is, near ones as is, farther ones halfway within
+    [near, jump] per reading, a single far reading held until the next agrees, rounding half up
+    and the BLE limit, nothing outside the reading phase."""
+    fw, d = cfg["firmware"], readout.DisplayState()
+    near, jump = fw["display_near_bpm"], fw["display_jump_bpm"]
+    assert (near, jump) == (3, 10)
+    shown = [readout.display_step(cfg, d, bpm, True) for bpm in
+             (71.5, 74.0, 80.0, 100.0, 101.0, None, 60.0, 98.0)]
+    assert shown == [72, 74, 77, 77, 87, 87, 87, 87]
+    assert readout.display_step(cfg, d, 97.0, True) == 92
+    assert readout.display_step(cfg, d, None, False) == readout.DISPLAY_NONE
+    assert readout.display_step(cfg, d, 300.0, True) == readout.DISPLAY_MAX_BPM
 
 
 def test_heart_presence_and_loss(cfg):

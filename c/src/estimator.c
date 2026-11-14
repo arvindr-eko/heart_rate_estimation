@@ -8,7 +8,7 @@
  * activation rises; front end, quality and network keep running. */
 #include <math.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 #define BLOCK_ROUNDING 1e-4f        /* tolerance of the seconds-to-blocks conversion */
 #define MAX_SETTING_S 3600.0f       /* longest accepted time setting */
@@ -45,13 +45,14 @@ static void clear_analysis(hr_state_t *s)
 #endif
 }
 
-/* Clear every block state and the readout; the settings are kept. */
+/* Clear every block state, the readout and the display; settings and queued input are kept. */
 static void clear(hr_state_t *s)
 {
     hr_frontend_init(&s->fe);
     hr_quality_init(&s->q);
     hr_net_init(&s->nn);
     clear_analysis(s);
+    s->shown_bpm = s->pending_bpm = HR_DISPLAY_NONE;
 }
 
 /* Runtime settings of configs/device.yml. */
@@ -59,6 +60,7 @@ void hr_default_settings(hr_settings_t *settings)
 {
     settings->confidence = HR_DEFAULT_CONFIDENCE;
     settings->slow_irregular_after_s = HR_DEFAULT_SLOW_IRREGULAR_AFTER_S;
+    settings->slow_irregular_confidence = HR_DEFAULT_SLOW_IRREGULAR_CONFIDENCE;
     settings->latest_s = HR_DEFAULT_LATEST_S;
 }
 
@@ -68,7 +70,9 @@ hr_result_t hr_set_settings(hr_state_t *s, const hr_settings_t *settings)
     if (s == 0 || settings == 0)
         return HR_ERR_ARG;
     const float slow = settings->slow_irregular_after_s, latest = settings->latest_s;
+    const float slow_conf = settings->slow_irregular_confidence;
     if (!(settings->confidence > 0.0f && settings->confidence <= 1.0f)
+        || !(slow_conf > 0.0f && slow_conf <= 1.0f)
         || !(slow >= 0.0f && slow <= MAX_SETTING_S) || !(latest >= 0.0f && latest <= MAX_SETTING_S))
         return HR_ERR_ARG;
     s->settings = *settings;
@@ -94,6 +98,9 @@ hr_result_t hr_init(hr_state_t *s, const hr_settings_t *settings)
         return HR_ERR_ARG;
     clear(s);
     s->quiet_samples = 0;
+    s->blocks_written = s->blocks_read = s->blocks_done = 0;
+    s->ring_fill = 0;
+    s->gap_pending = 0;
     return HR_OK;
 }
 
@@ -267,13 +274,17 @@ static int frame(hr_state_t *s, hr_reading_t *out)
     s->last.confidence = f->path == HR_PATH_REGULAR ? f->p_fine : f->p_rough;
     s->last.path = f->path;
     s->last.first = (uint8_t)(s->first_block == s->n_blocks);
+    s->last.bpm_valid = s->last.raw_candidate_valid = true;
+    s->last.is_flatline = false;
+    s->last.raw_candidate_bpm = hr;
+    s->last.harmonic_confirmed = -1;
     if (out)
         *out = s->last;
     return 1;
 }
 
 /* Blocks A-C for one input block; the frame work every HR_FRAME_BLOCKS blocks. */
-int hr_process_block(hr_state_t *s, const int16_t pcm[HR_BLOCK_SAMPLES], hr_reading_t *out)
+int hr_process_block(hr_state_t *s, const int16_t *pcm, hr_reading_t *out)
 {
     float env[HR_FE_OUT][HR_ENV_PER_BLOCK];
     /* scratch.score is free between frames: the front end's source signal */

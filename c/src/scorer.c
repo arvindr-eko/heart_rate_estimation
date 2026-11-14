@@ -4,7 +4,7 @@
  * (hr_sc_w1 = w1 / std, hr_sc_b1 = b1 - (mean / std) @ w1). */
 #include <math.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 /* Score of one state from its inputs (standardisation folded into the weights). */
 float hr_scorer_logit(const float in[HR_N_IN])

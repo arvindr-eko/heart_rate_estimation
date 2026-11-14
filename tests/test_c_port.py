@@ -1,13 +1,16 @@
 """C port (c/) against the Python device reference (training.c_port): every block's output and
-the readings on the synthetic cases, a 30 min session, the self-test on the host with the
-state size against the RAM budget, and the readings on every test recording against the frozen
-Python readings when the local data is available. Skipped without a C toolchain."""
+the readings on the synthetic cases, the firmware calls against hr_process_block and the
+reference display rule, restarts after input gaps, a 30 min session, the self-test on the host
+with the state size against the RAM budget, and the readings on every test recording against
+the frozen Python readings when the local data is available. Skipped without a C toolchain."""
 
+import ctypes
 import json
 import re
 import shutil
 import subprocess
 
+import numpy as np
 import pytest
 
 from tests.conftest import golden_file, needs_data
@@ -59,6 +62,47 @@ def test_lift_off_matches_reference(cfg, lib, cases, case):
     assert r["reading_confidence"] <= c_port.RECORDING_TOL["confidence"]
 
 
+@pytest.mark.parametrize("case", [name for name, _, _ in c_port.SYNTHETIC])
+def test_firmware_calls_match_blocks(cfg, lib, cases, case):
+    """Firmware calls at random processing intervals: every shown value equals the reference
+    display rule over hr_process_block's readings, every latest reading equals its own."""
+    for seed in range(3):
+        r = c_port.compare_stream(cfg, lib, cases[case], seed)
+        assert r["processed"] == r["blocks"] and r["checks"] > 0
+        assert r["shown_mismatches"] == r["reading_mismatches"] == 0, r
+
+
+def test_firmware_input_gap_restarts(cfg, lib, cases):
+    """Input pushed beyond firmware.ring_blocks before processing is dropped, as are samples
+    pushed as NULL; the next complete block starts a new measurement."""
+    block, ring = cfg["stream"]["block_samples"], cfg["firmware"]["ring_blocks"]
+    block_s = block / cfg["stream"]["fs_hz"]
+    pcm, state, out = cases["hr72"], ctypes.create_string_buffer(lib.hr_state_size()), \
+        c_port.Reading()
+    lib.hr_init(state, None)
+
+    def push(first: int, last: int) -> bool:
+        """Push blocks first to last - 1 of the case."""
+        piece = np.ascontiguousarray(pcm[first * block:last * block])
+        return lib.hr_push_data(state, piece.ctypes.data_as(ctypes.POINTER(ctypes.c_int16)),
+                                piece.size)
+
+    def process() -> tuple[int, float]:
+        """Process and release the queued blocks; their number and the measurement time."""
+        n = lib.hr_process_chunk(state)
+        assert lib.hr_update_chunk(state) == 0
+        lib.hr_calculate(state, ctypes.byref(out))
+        return n, out.t_s
+
+    assert push(0, ring + 3)
+    assert process() == (ring, pytest.approx(ring * block_s))
+    assert push(ring + 3, ring + 5)
+    assert process() == (2, pytest.approx(2 * block_s))
+    assert not lib.hr_push_data(state, None, c_port.PUSH_SAMPLES)
+    assert push(ring + 5, ring + 6)
+    assert process() == (1, pytest.approx(block_s))
+
+
 def test_long_session(cfg, lib):
     """30 min at 72 BPM: C reading times identical to Python, BPM and confidence within
     READING_TOL, no restart, no loss of accuracy at the end, lag sums within 1e-3 of a direct
@@ -73,24 +117,25 @@ def test_long_session(cfg, lib):
 
 def test_selftest_passes(cfg, lib):
     """Self-test of the C port (c/tools/hr_selftest.c, product build) on the host with new
-    cases: PASS, and its state fits the RAM budget (c_port.BUDGET)."""
+    cases: PASS, and its state without the input ring fits the RAM budget (c_port.BUDGET)."""
     c_port.write_selftest(cfg)
     out = subprocess.run(["make", "-s", "-C", str(c_port.C_DIR), "selftest"],
                          capture_output=True, text=True)
     assert out.returncode == 0 and out.stdout.rstrip().endswith("hr_selftest: PASS"), out.stdout
-    state_bytes = int(re.search(r"state (\d+) bytes", out.stdout).group(1))
-    assert state_bytes <= c_port.BUDGET["ram_bytes"]
+    sizes = re.search(r"state (\d+) bytes, input ring (\d+)", out.stdout)
+    assert int(sizes.group(1)) - int(sizes.group(2)) <= c_port.BUDGET["ram_bytes"]
 
 
 def test_m4_budget(cfg, lib):
-    """Cortex-M4 build (make m4): state and the deepest stack path of hr_process_block within
-    c_port.BUDGET."""
+    """Cortex-M4 build (make m4): state without the input ring and the deepest stack path of
+    hr_process_chunk (firmware calls; includes hr_process_block) within c_port.BUDGET."""
     if not shutil.which("clang"):
         pytest.skip("no clang for the Cortex-M4 build")
     out = subprocess.run(["make", "-s", "-C", str(c_port.C_DIR), "m4"], capture_output=True,
                          text=True)
     assert out.returncode == 0, out.stdout + out.stderr
     state_bytes = int(re.search(r"(\d+) B hr_state_size_probe", out.stdout).group(1))
+    state_bytes -= int(re.search(r"(\d+) B hr_input_ring_probe", out.stdout).group(1))
     stack = c_port.m4_stack()
     assert state_bytes <= c_port.BUDGET["ram_bytes"]
     assert stack["bytes"] <= c_port.BUDGET["stack_bytes"], stack

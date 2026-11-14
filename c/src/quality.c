@@ -4,7 +4,7 @@
  * first sample). */
 #include <math.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 #define ENERGY_FLOOR 1e-30f
 #define NO_RATIO     (-1e30f)  /* before the first sample (-inf in the reference); below every

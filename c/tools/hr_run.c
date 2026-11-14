@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 #define MAX_INPUT_S 600             /* longest input read, s */
 

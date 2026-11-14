@@ -14,6 +14,7 @@ key test results; the full documentation of a version is `docs/` at its tag.
 2. Evaluate: `hr-estimation evaluate --split val`, then once per agreed candidate
    `--split test` and `--split test --stress`, each with `--tag vMAJOR.MINOR.PATCH`.
 3. When readings changed, update the golden readings (`output/golden/`) from the test run; run
+   `hr-estimation c-model` (the committed `c/generated/` files the firmware builds from) and
    `pytest` (includes the C port against the Python reference).
 4. Regenerate the README's version table and key results, the tables of `docs/` and
    `docs/figures/` from the val, test and stress runs of step 2.
@@ -21,6 +22,36 @@ key test results; the full documentation of a version is `docs/` at its tag.
    the known limitations in the README.
 6. Commit, tag `vMAJOR.MINOR.PATCH`, push the branch and the tag
    (`git push origin main vMAJOR.MINOR.PATCH`).
+
+## 2.0.0 (2026-11-13), model hr_v10c, firmware calls; slow/irregular certainty as a setting
+H15 released: at the default settings the readings of 1.5.0rc1. Major version: the C API
+changes, to the one the firmware shares with its combo13 algorithm.
+- Setting `readout.slow_irregular_confidence` (was `decision.slow_irregular_confidence`; C:
+  `hr_settings_t.slow_irregular_confidence`, runtime): 0.9 by default (1.5.0rc1), 0.95 gives
+  1.5.0rc2. Test split: readings identical to 1.5.0rc1 at 0.9 and to 1.5.0rc2 at 0.95 on 825 of
+  825 recordings; noise evaluation identical to 1.5.0rc1. Test (as 1.5.0rc1): regular first
+  reading median 2.75 s, 90th percentile 4.0 s; first within ±3 BPM 0.886; MAE 1.34 BPM; slow
+  median 4.0 s; irregular first within ±10 BPM 0.762.
+- C API of the firmware's combo13 integration (`hr.h` of branch `align_heart_rate_algo_apis`):
+  state type opaque (`hr_blocks.h` for static allocation), C++ guards, named types, the combo13
+  reading fields. Four firmware calls (`c/src/stream.c`): `hr_push_data` (audio context; input
+  ring of `firmware.ring_blocks` 12 blocks = 0.6 s; NULL marks lost samples), `hr_process_chunk`,
+  `hr_update_chunk` and `hr_calculate` (the value to show). The input ring, the restart after an
+  input gap or a full ring, and the display rule (whole BPM, steps of 3 to 10 BPM, single
+  outliers hidden; config `firmware`) come unchanged from the device-tested firmware integration
+  (Coral builds h15 and h15bp); Python reference `readout.display_step`. `hr_process_block`
+  unchanged.
+- Model files `c/generated/hr_model.h` and `hr_model.c` committed (35 KB): firmware builds the
+  port without Python, from the bundle (`make dist`) or with the repository as a submodule.
+- Checks: the four calls against `hr_process_block` and the reference display rule on 10
+  synthetic cases at 3 random processing intervals each and on 60 test recordings (3,681
+  comparisons): identical readings and shown values; restart after a full ring and after lost
+  samples; host build with warnings as errors. Cortex-M4: state 14,868 bytes = 10,068 (budget
+  10,240) + 4,800 input ring; stack from `hr_process_chunk` 752 bytes (budget 1,024);
+  `stream.c` 728 bytes of code.
+- Golden readings: 1.5.0rc1's (the 1.5.0rc2 copy kept as `*_v1.5.0rc2.json`).
+- Firmware variants for the device test: h15 (defaults), h15p (input before the Coral noise
+  canceller), h15ba (0.95), h15bp (0.95, input before the canceller).
 
 ## 1.5.0rc2 (2026-11-12), model hr_v10c, more accurate first reading (release candidate, device test pending)
 From the 1.5.0rc1 device impression that the first reading was a little less accurate than with

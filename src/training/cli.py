@@ -11,8 +11,8 @@
                                                       placements with the estimator running
     hr-estimation noise-eval --export DIR             placement cases as int16 PCM + manifest
                                                       (firmware bench; patient audio)
-    hr-estimation c-model                             C model files and self-test cases:
-                                                      c/build/generated/
+    hr-estimation c-model                             C model files (c/generated/) and
+                                                      self-test cases (c/build/generated/)
 
 train, evaluate, noise-eval and c-model take --weights NAME (default: config `weights`); every
 command takes --set SECTION.KEY=VALUE (repeatable, value in YAML) to change an existing setting.

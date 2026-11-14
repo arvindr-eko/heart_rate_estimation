@@ -2,10 +2,12 @@
 
 User settings (config `readout`, runtime, no retraining): confidence (probability of being
 within ±3 BPM the first reading of a regular heart must reach), slow_irregular_after_s (earliest
-first reading for slow or irregular hearts) and latest_s (latest first reading when a heart
-sound is present). Internal constants: config `decision`. Calibration, per model and path
-(training.train.calibrate, validation split): logistic model of the probability of being within
-tolerance from the posterior mass near the estimate and the periodicity, 3 coefficients.
+first reading for slow or irregular hearts), slow_irregular_confidence (probability of being
+within ±10 BPM a slow or irregular first reading must reach from slow_irregular_relaxed_s) and
+latest_s (latest first reading when a heart sound is present). Internal constants: config
+`decision`. Calibration, per model and path (training.train.calibrate, validation split):
+logistic model of the probability of being within tolerance from the posterior mass near the
+estimate and the periodicity, 3 coefficients.
 
 Per frame, before the first reading (never before min_s; never while the activation's ACF at
 the estimate's period is below min_periodicity or its standard deviation over the features
@@ -24,6 +26,13 @@ mains hum):
 A reading is (t_s, bpm, confidence), the confidence being the calibrated probability for the
 frame's path. After the first reading, one reading per output period while a heartbeat is
 heard; with none for lost_after_s the measurement restarts (heart_absent, lost).
+
+Display (firmware calls, hr_calculate; config `firmware`), after every input block: a new
+reading in whole BPM (at most DISPLAY_MAX_BPM) is shown as is when it is the first or within
+display_near_bpm of the shown value; otherwise the shown value moves halfway, by display_near_bpm
+to display_jump_bpm per reading. A reading farther than display_jump_bpm away moves the display
+only once the next reading agrees with it within display_jump_bpm, so a single outlier is never
+shown. Nothing is shown outside the reading phase.
 """
 
 from dataclasses import dataclass
@@ -35,6 +44,8 @@ PRESENCE_FEATURES = ("periodicity", "recent", "ln_activation_sd", "agree", "roug
                      "fine_mass", "high_band", "high_band_x_periodicity")
 PRESENCE_SD_FLOOR = 1e-4    # activation SD floor before the logarithm
 PRESENCE_HF_RANGE = (-12.0, 4.0)   # high-band ratio clipped to this range (-inf: no input yet)
+DISPLAY_MAX_BPM = 255       # largest shown value: 8-bit heart rate field of the BLE stream
+DISPLAY_NONE = -1           # nothing shown
 
 @dataclass
 class Calibration:
@@ -52,6 +63,13 @@ class ReadoutState:
     last_output: float | None = None
     absent_frames: int = 0
     present_frames: int = 0
+
+
+@dataclass
+class DisplayState:
+    """Shown value and a held far reading, whole BPM (DISPLAY_NONE: none)."""
+    shown: int = DISPLAY_NONE
+    pending: int = DISPLAY_NONE
 
 
 def calibration_path(cfg: dict) -> Path:
@@ -210,9 +228,9 @@ def first_due(cfg: dict, a: dict, periodicity: float, activation_sd: float, hr: 
         return a["agree"] and a["p_fine"] >= rd["confidence"]
     if t + 1e-9 < rd["slow_irregular_after_s"]:
         return False
-    early = t + 1e-9 < dc["slow_irregular_relaxed_s"]
-    return a["p_rough"] >= dc["slow_irregular_early_confidence" if early
-                              else "slow_irregular_confidence"]
+    if t + 1e-9 < dc["slow_irregular_relaxed_s"]:
+        return a["p_rough"] >= dc["slow_irregular_early_confidence"]
+    return a["p_rough"] >= rd["slow_irregular_confidence"]
 
 
 def schedule(state: ReadoutState, cfg: dict, due: bool, hr: float, confidence: float,
@@ -227,3 +245,34 @@ def schedule(state: ReadoutState, cfg: dict, due: bool, hr: float, confidence: f
         return None
     state.last_output = t
     return (t, hr, confidence)
+
+
+def _smooth(cfg: dict, d: DisplayState, bpm: int) -> int:
+    """Shown value after a new reading of bpm (module docstring, display)."""
+    near, jump = cfg["firmware"]["display_near_bpm"], cfg["firmware"]["display_jump_bpm"]
+    if d.shown == DISPLAY_NONE:
+        d.pending = DISPLAY_NONE
+        return bpm
+    gap = bpm - d.shown
+    if abs(gap) > jump:
+        confirmed = d.pending != DISPLAY_NONE and abs(bpm - d.pending) <= jump
+        d.pending = bpm
+        if not confirmed:
+            return d.shown
+    else:
+        d.pending = DISPLAY_NONE
+    if abs(gap) <= near:
+        return bpm
+    step = min(max(abs(gap) // 2, near), jump)
+    return d.shown + (step if gap > 0 else -step)
+
+
+def display_step(cfg: dict, d: DisplayState, bpm: float | None, reading_phase: bool) -> int:
+    """Shown value after one input block with a new reading of bpm (None: none) and the phase
+    of the latest frame; whole BPM as the C port rounds it (float32, half up)."""
+    if bpm is not None:
+        whole = int(np.float32(bpm) + np.float32(0.5))
+        d.shown = _smooth(cfg, d, min(whole, DISPLAY_MAX_BPM))
+    if not reading_phase:
+        d.shown = d.pending = DISPLAY_NONE
+    return d.shown

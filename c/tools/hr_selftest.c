@@ -24,7 +24,7 @@
 #include <time.h>
 #endif
 
-#include "hr.h"
+#include "hr_blocks.h"
 #include "hr_selftest_cases.h"
 
 #if defined(HR_SELFTEST_TICKS)
@@ -150,6 +150,9 @@ static int check_api(hr_state_t *s)
     errors += hr_set_settings(s, &settings) != HR_ERR_ARG;
     hr_get_settings(s, &kept);
     errors += kept.confidence != HR_DEFAULT_CONFIDENCE;
+    settings = kept;
+    settings.slow_irregular_confidence = 1.5f;
+    errors += hr_set_settings(s, &settings) != HR_ERR_ARG;
     return errors;
 }
 
@@ -160,8 +163,9 @@ int hr_selftest(void)
     timing_t ordinary = {0u, 0u, 0u}, frame = {0u, 0u, 0u};
     int failed = 0, api = -1;
     ticks_start();
-    HR_SELFTEST_PRINTF("hr_selftest: version %s, model %s, state %lu bytes\n", hr_version(),
-                       hr_model_id(), (unsigned long)hr_state_size());
+    HR_SELFTEST_PRINTF("hr_selftest: version %s, model %s, state %lu bytes, input ring %lu\n",
+                       hr_version(), hr_model_id(), (unsigned long)hr_state_size(),
+                       (unsigned long)sizeof(state.ring));
     for (int i = 0; i < HR_SELFTEST_N_CASES; i++) {
         const hr_selftest_case_t *c = &hr_selftest_cases[i];
         const int errors = run_case(&state, c, &ordinary, &frame);

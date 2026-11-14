@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
-from device import estimator, features, frontend, net, scorer
+from device import estimator, features, frontend, net, readout, scorer
 from training import augment, c_model, config, data
 
 log = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ SYNTHETIC = [("hr72", 72, {}), ("hr45_slow", 45, {}), ("hr150", 150, {}), ("hr25
 HEART_THROUGHOUT = [name for name, hr, kw in SYNTHETIC if hr and "off_s" not in kw]
 SYNTHETIC_S = 10.0                   # length of a synthetic heart or noise signal
 PEAK = 16000                         # int16 peak of the synthetic cases
+PUSH_SAMPLES = 8                     # samples per hr_push_data: one 2 ms audio frame at 4 kHz
 TOL = {"band_log_energy": 1e-3, "activation": 1e-4, "features": 1e-3, "log_emission": 2e-3,
        "posterior": 1e-4, "t_s": 1e-4, "hr": 1e-3, "frame_hr": 1e-3, "periodicity": 1e-4,
        "activation_sd": 1e-5, "cv": 1e-4, "beat_hr": 1e-3, "p_fine": 1e-4, "p_rough": 1e-4}
@@ -50,8 +51,10 @@ RECORDING_TOL = {"bpm": 0.5, "confidence": 0.05}   # recordings, gaps, target: f
                                                    # (up to 0.47 BPM) and int16 codes (ACF,
                                                    # NCCF) one step apart
 BUDGET = {                           # MCU share of the algorithm (PSoC 6, Cortex-M4); measured
-    "ram_bytes": 10240,              # state, hr_state_t (make m4)
-    "stack_bytes": 1024,             # deepest call path from hr_process_block, libm included
+    "ram_bytes": 10240,              # state without the input ring (hr_state_t, make m4); the
+                                     # ring is set by config firmware.ring_blocks
+    "stack_bytes": 1024,             # deepest call path from hr_process_chunk (calls
+                                     # hr_process_block), libm included
     "libm_stack_bytes": 32,          # each call outside the port: newlib expf and logf,
                                      # Cortex-M4F at -Os, measured
     "flash_bytes": 5120,             # code and constants without libm (make m4)
@@ -71,7 +74,9 @@ INFO_FIELDS = ("t_s", "estimate_bpm", "frame_bpm", "periodicity", "activation_sd
 class Reading(ctypes.Structure):
     """hr_reading_t."""
     _fields_ = [("t_s", ctypes.c_float), ("bpm", ctypes.c_float), ("confidence", ctypes.c_float),
-                ("path", ctypes.c_uint8), ("first", ctypes.c_uint8)]
+                ("path", ctypes.c_uint8), ("first", ctypes.c_uint8), ("bpm_valid", ctypes.c_bool),
+                ("is_flatline", ctypes.c_bool), ("raw_candidate_bpm", ctypes.c_float),
+                ("raw_candidate_valid", ctypes.c_bool), ("harmonic_confirmed", ctypes.c_int)]
 
 
 class FrameInfo(ctypes.Structure):
@@ -178,6 +183,7 @@ def load(cfg: dict) -> ctypes.CDLL:
                  "hr_debug_log_emission", "hr_get_posterior"):
         getattr(lib, name).restype = ctypes.POINTER(ctypes.c_float)
     lib.hr_state_size.restype = ctypes.c_uint32
+    lib.hr_push_data.restype = ctypes.c_bool
     return lib
 
 
@@ -307,6 +313,56 @@ def compare_recordings(cfg: dict, lib: ctypes.CDLL, golden: list[dict]) -> dict:
             "confidence_max": float(conf.max())}
 
 
+# Firmware calls
+
+def _fields(reading: Reading) -> tuple:
+    """Values of every hr_reading_t field."""
+    return tuple(getattr(reading, name) for name, _ in Reading._fields_)
+
+
+def compare_stream(cfg: dict, lib: ctypes.CDLL, pcm: np.ndarray, seed: int = 0) -> dict:
+    """Firmware calls (hr_push_data of PUSH_SAMPLES, then hr_process_chunk, hr_update_chunk and
+    hr_calculate after a random 1 to ring_blocks - 2 blocks) against hr_process_block on the same
+    PCM: at each processing, the shown value against readout.display_step over the block-by-block
+    readings and phases, and the latest reading (all fields) against hr_process_block's."""
+    block = cfg["stream"]["block_samples"]
+    ref, sut = (ctypes.create_string_buffer(lib.hr_state_size()) for _ in range(2))
+    lib.hr_init(ref, None)
+    lib.hr_init(sut, None)
+    reading, info, shown_c, latest = Reading(), FrameInfo(), Reading(), Reading()
+    display, expected = readout.DisplayState(), []
+    for i in range(pcm.size // block):
+        piece = np.ascontiguousarray(pcm[i * block:(i + 1) * block])
+        emitted = lib.hr_process_block(ref, piece.ctypes.data_as(ctypes.POINTER(ctypes.c_int16)),
+                                       ctypes.byref(reading))
+        lib.hr_get_frame_info(ref, ctypes.byref(info))
+        shown = readout.display_step(cfg, display, reading.bpm if emitted else None,
+                                     info.phase == 2)
+        has = lib.hr_get_reading(ref, ctypes.byref(latest))
+        expected.append((shown, _fields(latest) if has else None))
+    rng = np.random.default_rng(seed)
+    draw = lambda: int(rng.integers(1, cfg["firmware"]["ring_blocks"] - 1))  # noqa: E731
+    checks = shown_bad = reading_bad = done = 0
+    due = draw()
+    for start in range(0, len(expected) * block, PUSH_SAMPLES):
+        piece = np.ascontiguousarray(pcm[start:start + PUSH_SAMPLES])
+        lib.hr_push_data(sut, piece.ctypes.data_as(ctypes.POINTER(ctypes.c_int16)), piece.size)
+        if (start + PUSH_SAMPLES) // block < due and start + PUSH_SAMPLES < len(expected) * block:
+            continue
+        done += lib.hr_process_chunk(sut)
+        lib.hr_update_chunk(sut)
+        on_show = lib.hr_calculate(sut, ctypes.byref(shown_c))
+        want_shown, want_reading = expected[done - 1]
+        has = lib.hr_get_reading(sut, ctypes.byref(latest))
+        shown_bad += (int(shown_c.bpm) if on_show else readout.DISPLAY_NONE) != want_shown
+        reading_bad += (_fields(latest) if has else None) != want_reading
+        checks += 1
+        due = done + draw()
+    return {"blocks": len(expected), "processed": done, "checks": checks,
+            "shown_mismatches": shown_bad, "reading_mismatches": reading_bad,
+            "shown_values": len({s for s, _ in expected})}
+
+
 # Long session
 
 def long_session(cfg: dict, lib: ctypes.CDLL, ls: dict = LONG_SESSION) -> dict:
@@ -385,7 +441,7 @@ def _frames() -> dict[str, int]:
     return frames
 
 
-def m4_stack(entry: str = "hr_process_block") -> dict:
+def m4_stack(entry: str = "hr_process_chunk") -> dict:
     """Worst-case stack of entry on the Cortex-M4 build (after make m4): the deepest path of its
     call graph, each function with its own frame, and each function outside the port (libm,
     compiler runtime) with BUDGET libm_stack_bytes. Returns bytes and the path."""
@@ -467,7 +523,7 @@ def write_selftest(cfg: dict) -> Path:
             "    const hr_selftest_reading_t *readings;", "} hr_selftest_case_t;", ""]
     cases = ("static const hr_selftest_case_t hr_selftest_cases[HR_SELFTEST_N_CASES] = {\n"
              + ",\n".join(table) + "\n};\n")
-    path = c_model.OUT_DIR / "hr_selftest_cases.h"
+    path = C_DIR / "build" / "generated" / "hr_selftest_cases.h"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(head) + "\n" + "\n".join(body) + "\n" + cases + "\n#endif\n")
     log.info("self-test cases: %s -> %s", ", ".join(SELFTEST_CASES),

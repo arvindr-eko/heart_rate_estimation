@@ -4,7 +4,7 @@
  * HR_SLOW_BPM or the picked-beat CV is at least HR_REGULAR_MAX_CV. Regular: due when the frame
  * and the tracker agree and the probability within ±3 BPM reaches the confidence setting;
  * slow/irregular: from slow_irregular_after_s at HR_SLOW_IRREGULAR_EARLY_CONFIDENCE within
- * ±10 BPM, from HR_SLOW_IRREGULAR_RELAXED_BLOCKS on at HR_SLOW_IRREGULAR_CONFIDENCE;
+ * ±10 BPM, from HR_SLOW_IRREGULAR_RELAXED_BLOCKS on at the slow_irregular_confidence setting;
  * forced at latest_s when the mass within ±HR_CONF_ROUGH_BPM reaches HR_FORCED_MIN_MASS.
  * Heart present (first reading): signal clean (block Q), learned presence at least
  * HR_PRESENCE_MIN, and the gates above, for HR_CONFIRM_FRAMES frames. No heartbeat in a frame:
@@ -16,7 +16,7 @@
  * Times are compared in blocks, exact for thresholds on the block grid. */
 #include <math.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 /* Posterior mass of the states within ±half_width_bpm of hr. */
 float hr_mass_within(const float posterior[HR_N_STATES], float hr, float half_width_bpm)
@@ -85,7 +85,7 @@ int hr_first_due(const hr_state_t *s, const hr_frame_info_t *f, float rough_mass
         return 0;
     return f->p_rough >= (s->n_blocks < HR_SLOW_IRREGULAR_RELAXED_BLOCKS
                               ? HR_SLOW_IRREGULAR_EARLY_CONFIDENCE
-                              : HR_SLOW_IRREGULAR_CONFIDENCE);
+                              : s->settings.slow_irregular_confidence);
 }
 
 /* 1 when the frame has no heartbeat: signal noisy (block Q), presence below HR_PRESENCE_LOST,

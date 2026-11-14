@@ -110,7 +110,8 @@ Input: a block of 200 samples (50 ms at 4000 Hz) per call. Values in brackets: s
     - regular heart: once the probability of being within ±3 BPM reaches 70 %
       (`readout.confidence`) and the snapshot HR agrees with the estimate within 5 %;
     - slow (< 50 BPM) or irregular heart: from 3 s (`readout.slow_irregular_after_s`), once the
-      probability of being within ±10 BPM reaches 97 % (95 % from 4 s);
+      probability of being within ±10 BPM reaches 97 % (from 4 s: 90 %,
+      `readout.slow_irregular_confidence`);
     - at 8 s (`readout.latest_s`): if the tracker holds at least 30 % of its probability within
       ±10 BPM of the estimate.
 12. **Then one reading per second** (`stream.output_period_s`). An update without heartbeat
@@ -541,7 +542,8 @@ Before the first reading, each update:
    = within ±10 BPM (slow or irregular path).
 4. **Due?**
    - regular: snapshot HR within 5 % of the HMM estimate and `p_fine` ≥ `confidence` (0.7);
-   - slow or irregular: from 3 s, when `p_rough` ≥ 0.97; from 4 s, when `p_rough` ≥ 0.95;
+   - slow or irregular: from 3 s, when `p_rough` ≥ 0.97; from 4 s, when `p_rough` ≥
+     `slow_irregular_confidence` (0.9);
    - any heart: at 8 s, if the mass within ±10 BPM ≥ 0.3.
 
 **Shape walk: arrays reduced to a few numbers, then to one decision.**
@@ -555,7 +557,7 @@ yes ─────────────────────────�
 ```
 Example: at 2.5 s `p_fine` is already 0.92, but the picked beats' CV puts the heart on the
 slow/irregular path and the presence gate is at 0.21. Presence reaches 0.74 at 3.0 s; after 1 s
-of presence, at 4.0 s, `p_rough` 0.96 ≥ 0.95 → reading (4.0 s, 71.7 BPM, 0.96).
+of presence, at 4.0 s, `p_rough` 0.96 ≥ 0.9 → reading (4.0 s, 71.7 BPM, 0.96).
 
 After the first reading: the current HMM estimate every 1 s while a heartbeat is heard. An
 update without heartbeat (presence < 0.3, periodicity < 0.15, activation SD < 0.03 or recent
@@ -576,7 +578,7 @@ update at any time. The three `readout` settings can change at runtime without r
 ![Readout example](figures/tutorial/f_readout.png)
 
 *`p_fine` crosses 0.7 at 2.25 s, but the presence gate holds the reading until 4.0 s (1 s
-after it opens at 3.0 s), when the slow/irregular rule (`p_rough` ≥ 0.95 from 4 s) is met. This
+after it opens at 3.0 s), when the slow/irregular rule (`p_rough` ≥ 0.9 from 4 s) is met. This
 clean example without the device channel is slower than recordings (median 2.75 s).*
 
 ## 5. One heart end to end
@@ -594,11 +596,11 @@ allowed reading (1.5 s). Orange dashed: first reading.*
 | 2.0 s | 200 | estimate 72.2 BPM, periodicity 0.27, `p_fine` 0.40; the picked beats' CV puts it on the slow/irregular path; presence 0.06 | nothing |
 | 2.5 s | 250 | `p_fine` 0.92; presence 0.21 < 0.6 | nothing |
 | 3.0 s | 300 | presence 0.74 ≥ 0.6: heart present, 1 s confirmation starts | nothing |
-| 4.0 s | 400 | presence held 1 s; `p_rough` 0.96 ≥ 0.95 (slow/irregular path, from 4 s) | **first reading: 71.7 BPM, confidence 0.96** |
+| 4.0 s | 400 | presence held 1 s; `p_rough` 0.96 ≥ 0.9 (slow/irregular path, from 4 s) | **first reading: 71.7 BPM, confidence 0.96** |
 | 5, 6 s | 400 | HMM refines | 71.9, 71.7 BPM, confidence 0.98 |
 
 On real recordings the first reading for regular hearts comes at 2.75 s (median, test split;
-90 % by 4.25 s); slow or irregular hearts from 3 s ([results.md](results.md) §2).
+90 % by 4 s); slow or irregular hearts from 3 s ([results.md](results.md) §2).
 
 ## 6. Versions since 1.1.0
 What each release candidate changed in the blocks above; numbers on held-out data, details and
@@ -611,18 +613,25 @@ device tests in [CHANGELOG.md](../CHANGELOG.md).
 | 1.4.0rc1 | hr_v9c | analysis restart while no heartbeat is heard; slow or irregular readings from 3 s (§4.10) | placement with the input running: median first reading 4.75 to 3.25 s after room noise |
 | 1.5.0rc1 | hr_v10c | network trained against finger taps of many shapes and on synthetic S1-S2 hearts (§4.3) | rhythmic finger taps 81 % to 33 % of clips with a reading; regular first reading median 2.75 s, 90 % by 4 s; faint hearts sooner |
 | 1.5.0rc2 | hr_v10c | slow or irregular first reading from 4 s at probability 0.95 (was 0.9) (§4.10) | more accurate first readings: MAE 1.34 to 1.28 BPM, irregular within ±5 BPM 0.659 to 0.681; slow hearts read later (median 4.0 to 5.25 s) |
+| 2.0.0 | hr_v10c | that probability as the runtime setting `slow_irregular_confidence` (default 0.9, as 1.5.0rc1); firmware calls with the input ring and the display rule in the C library | readings of 1.5.0rc1 (identical on the test split); 0.95 gives those of 1.5.0rc2 |
 
 ### What changed from h14 to h15
-Device builds: h14 = 1.4.0rc1 (`main`), h15 = 1.5.0rc1, h15b = 1.5.0rc2 (branch
-`exp/tap_rejection`). Test split unless noted; details in [CHANGELOG.md](../CHANGELOG.md).
-- Finger taps: the network trains on taps of many shapes and rates (ring 20-250 Hz, with and without
-  a click and a press pulse, 40-160 per min) and on synthetic hearts with S1 and S2, so a pair of
-  sounds marks a beat and a single tap does not. Rhythmic taps with a reading: 81 % to 33 % of 300
-  varied tap clips.
-- Faint hearts: synthetic, −6 dB SNR: median first reading 8.0 to 4.0 s.
-- Accuracy (h15b): MAE 1.36 to 1.28 BPM; regular first reading within ±3 BPM 0.890 to 0.888;
-  irregular within ±5 BPM 0.694 to 0.681.
-- Speed (h15b): regular first reading median 3.0 to 2.75 s, 90th percentile 4.25 s both; slow hearts
-  later (median 4.5 to 5.25 s).
-- Unchanged: C code, state (10,020 bytes), stack, flash and cycles; only the weights and one readout
-  constant (slow or irregular first reading at probability 0.95 from 4 s) changed.
+Device builds: h14 = 1.4.0rc1; h15 = 2.0.0 with the default settings (the readings of
+1.5.0rc1). Firmware variants of 2.0.0 separate the setting from the estimator's input: h15p
+(input before the Coral noise canceller), h15ba (`slow_irregular_confidence` 0.95, the value of
+1.5.0rc2) and h15bp (0.95, input before the canceller). Test split unless noted; details in
+[CHANGELOG.md](../CHANGELOG.md).
+- Finger taps: the network trains on taps of many shapes and rates (ring 20-250 Hz, with and
+  without a click and a press pulse, 40-160 per min) and on synthetic hearts with S1 and S2, so
+  a pair of sounds marks a beat and a single tap does not. Rhythmic taps with a reading: 81 % to
+  33 % of 300 varied tap clips.
+- Faint hearts (synthetic, −6 dB SNR): median first reading 8.0 to 4.0 s.
+- Speed (h15): regular first reading median 3.0 to 2.75 s, 90th percentile 4.25 to 4.0 s; slow
+  hearts median 4.5 to 4.0 s.
+- Accuracy (h15): MAE 1.36 to 1.34 BPM; regular first reading within ±3 BPM 0.890 to 0.886;
+  irregular first reading within ±10 BPM 0.787 to 0.762. With `slow_irregular_confidence` 0.95:
+  MAE 1.28 BPM, irregular 0.770, slow hearts later (median 5.25 s).
+- C: the estimator code is unchanged. 2.0.0 adds the four firmware calls (`hr_push_data`,
+  `hr_process_chunk`, `hr_update_chunk`, `hr_calculate`; the API shared with combo13), with the
+  input ring and the display rule in the library, and the runtime setting
+  `slow_irregular_confidence`; state 10,068 bytes plus a 4,800-byte input ring.

@@ -10,7 +10,7 @@
  * The section loop computes what CMSIS-DSP arm_biquad_cascade_df2T_f32 computes. */
 #include <math.h>
 
-#include "hr.h"
+#include "hr_blocks.h"
 
 /* Zero filter states; set from the first sample of the first block. */
 void hr_frontend_init(hr_frontend_t *fe)
